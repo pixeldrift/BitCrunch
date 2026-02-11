@@ -482,12 +482,19 @@ function explodeBlock(block, callback = null) {
 // Drawing Functions
 // ====================
 
+const backgroundCache = document.createElement("canvas");
+const bgCtx = backgroundCache.getContext("2d");
+
+// Draw static grid once
+bgCtx.drawImage(spriteSheet, gameGrid.x, gameGrid.y, ...);
 
 // Draw the game
 function drawGame() {
-
+  
+    ctx.drawImage(backgroundCache, 0, 0);
+  
     // Start with a blank canvas
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    // ctx.clearRect(0, 0, canvas.width, canvas.height);
     // Set the font right up front
     ctx.font = "24px Silkscreen";
 

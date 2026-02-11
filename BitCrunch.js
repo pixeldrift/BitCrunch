@@ -878,3 +878,1592 @@ function drawBlock(block) {
     );
 } //drawBlock
 
+function drawLaserBeam() {
+    if (!activeBlock || activeBlock.type !== "Blaster") return;
+
+    const ghostPos = getGhostPosition();
+    if (!ghostPos) return;
+
+    const startX = activeBlock.x;
+    const startY = activeBlock.y + BLOCK_HEIGHT;
+    const endY = ghostPos.y + BLOCK_HEIGHT;
+
+        ctx.drawImage(spriteSheet, 
+            laser.x, laser.y, 
+            laser.width, laser.height, 
+            startX, startY,
+            BLOCK_WIDTH, ghostPos.y - activeBlock.y + BLOCK_HEIGHT
+        );
+
+} // drawLaserBeam
+
+
+// Animate a block shrinking before it disappears
+function animateBlockRemoval(block, options = {}, callback = null) {
+
+    const {
+        duration = 300, // Total duration in ms
+        scaleFrom = 1,
+        scaleTo = 0,
+        tintColor = null,
+        outline = false,
+        overlaySprite = null,
+    } = options;
+
+    const startTime = performance.now();
+    const startScale = scaleFrom;
+    const scaleDiff = scaleTo - scaleFrom;
+
+    function animateFrame(now) {
+        const elapsed = now - startTime;
+        const progress = Math.min(elapsed / duration, 1);
+        const currentScale = startScale + progress * scaleDiff;
+
+        // Clear and redraw the entire screen for consistency
+        drawGame(); // Ensures a clean slate before redrawing the block
+
+        // Draw the shrinking block
+        const sprite = getBlockSprite(block);
+        if (!sprite) return;
+
+        const centerX = block.x + BLOCK_WIDTH / 2;
+        const centerY = block.y + BLOCK_HEIGHT / 2;
+        const drawWidth = BLOCK_WIDTH * currentScale;
+        const drawHeight = BLOCK_HEIGHT * currentScale;
+
+        const drawX = centerX - drawWidth / 2;
+        const drawY = centerY - drawHeight / 2;
+
+        // Optional tint background
+        if (tintColor) {
+            ctx.fillStyle = tintColor;
+            ctx.fillRect(drawX, drawY, drawWidth, drawHeight);
+        }
+
+        // Draw main block sprite
+        ctx.drawImage(
+            spriteSheet, 
+            sprite.x, sprite.y, 
+            sprite.width, sprite.height, 
+            drawX, drawY, 
+            drawWidth, drawHeight
+        );
+
+        // Optional overlay
+        if (overlaySprite) {
+            ctx.drawImage(
+                spriteSheet, 
+                overlaySprite.x, overlaySprite.y, 
+                overlaySprite.width, overlaySprite.height,
+                drawX, drawY,
+                drawWidth, drawHeight
+            );
+        }
+
+        // Optional outline
+        if (outline) {
+            ctx.strokeStyle = "white";
+            ctx.lineWidth = 2;
+            ctx.strokeRect(drawX, drawY, drawWidth, drawHeight);
+        }
+
+        if (progress < 1) {
+            requestAnimationFrame(animateFrame);
+        } else {
+            if (callback) callback();
+        }
+    }
+
+    // Refresh the screen
+    requestAnimationFrame(animateFrame);
+
+} // animateBlockRemoval
+
+
+// Draw the zapping animation
+function animateZap(centerBlockX, rowY, affectedBlocks, callback = null) {
+    const flickerCount = 3;
+    const flickerDelay = 100;
+    let flickerIndex = 0;
+    let visible = true;
+
+    function flicker() {
+        if (visible) {
+            lightningOverlay = {
+                centerX: centerBlockX,
+                rowY: rowY,
+                active: true,
+                blocks: affectedBlocks
+            };
+        } else {
+            lightningOverlay = null;
+        }
+
+        drawGame(); // Will show or hide based on lightningOverlay
+
+        flickerIndex++;
+        visible = !visible; // Toggle on next cycle
+
+        if (flickerIndex < flickerCount * 2) {
+            setTimeout(flicker, flickerDelay);
+        } else {
+            lightningOverlay = null;
+            if (callback) callback();
+        }
+    }
+
+    flicker();
+} // animateZap
+
+
+function animateBug(block, callback) {
+    let flickerCount = 0; // Keep track of flickers
+    const totalFlickers = 3; // Number of flickers to perform
+    const flickerInterval = 100; // Milliseconds between each sprite switch
+
+    // Get the sprite index for the blank orange block
+    const orangeBlock = new Block(400, 540, 17);  // x, y, and spriteIndex for Orange
+    const blankSprite = orangeBlock.spriteIndex;
+    const originalSprite = block.spriteIndex;
+
+    // Flicker the sprite back and forth
+    function toggleSprite() {
+        if (flickerCount < totalFlickers) {
+            // Toggle between the original sprite and the blank/orange sprite
+            block.spriteIndex = (block.spriteIndex === originalSprite) ? blankSprite : originalSprite;
+
+            flickerCount++;
+
+            // Continue flickering at the interval
+            setTimeout(toggleSprite, flickerInterval);
+        } else {
+            // After flickering, revert the sprite to the original and call the callback
+            block.spriteIndex = originalSprite;
+
+            // Trigger the callback to continue the game logic (like applying gravity)
+            if (callback) {
+                callback();  // Ensure this callback is always triggered
+            }
+        }
+    }
+
+    // Start the flickering effect
+    toggleSprite();
+} // animateBug
+
+
+// Sequentially fill the game grid with a specified block sprite
+function fillGrid(blockType, speed, callback = null) {
+
+    let yStart = canvas.height - BLOCK_HEIGHT;
+    let xStart = 0;
+    let gridFilling = true;
+
+    function drawNextBlock() {
+        if (!gridFilling) return;
+
+        if (yStart < 0) {
+            gridFilling = false;
+            if (callback) callback();
+            return;
+        }
+
+        // Check that blockType has the necessary sprite data
+        if (!blockType || typeof blockType.x === "undefined") {
+            console.warn("fillGrid received invalid blockType:", blockType);
+            gridFilling = false;
+            if (callback) callback();
+            return;
+        }
+
+        // Draw the block's sprite
+        ctx.drawImage(
+            spriteSheet,
+            blockType.x, blockType.y,
+            blockType.width, blockType.height,
+            xStart, yStart,
+            BLOCK_WIDTH, BLOCK_HEIGHT
+        );
+
+        xStart += BLOCK_WIDTH;
+        if (xStart >= canvas.width) {
+            xStart = 0;
+            yStart -= BLOCK_HEIGHT;
+        }
+
+        setTimeout(drawNextBlock, speed);
+    }
+
+    drawNextBlock();
+    
+} // fillGrid
+
+
+// ====================
+// Utility Functions
+// ====================
+
+
+function getBlockByType(type) {
+    return blockTypes.find(b => b.type === type);
+} // getBlockByType
+
+
+function getBlockAt(x, y) {
+    return blocks.find(b => b.x === x && b.y === y) || null;
+} // getBlockAt
+
+
+// Return the block below the passed block object
+function getBlockBelow(block) {
+    return getBlockAt(block.x, block.y + BLOCK_HEIGHT);
+} // getBlockBelow
+
+
+// Remove a block from the board
+function removeBlock(block, callback = null) {
+    if (!block) return;
+
+    const index = blocks.indexOf(block);
+    if (index !== -1) {
+        blocks.splice(index, 1);
+
+        // Optional: play an animation here later before removing visually
+        animateBlockRemoval();
+
+        // Apply gravity after a short delay to allow other things to finish
+        setTimeout(() => {
+            applyGravity(() => {
+                if (callback) callback();
+            });
+        }, 100);
+    }
+} // removeBlock
+
+
+function checkCollision(block) {
+    const nextY = block.y + gravity;
+
+    // Bottom boundary check
+    if (nextY + BLOCK_HEIGHT > canvas.height) {
+        return true;
+    }
+
+    // Check for overlapping with settled blocks
+    return blocks.some(other => {
+        const sameColumn = block.x === other.x;
+        const overlapY = nextY + BLOCK_HEIGHT > other.y && block.y < other.y;
+
+        return sameColumn && overlapY;
+    });
+} // checkCollision
+
+
+// Move all blocks down to fill available empty spaces
+function applyGravity(callback = null) {
+    const columns = canvas.width / BLOCK_WIDTH;
+    let fallingBlocks = 0;
+
+    for (let col = 0; col < columns; col++) {
+        const colX = col * BLOCK_WIDTH;
+
+        // Collect blocks in this column, top-down
+        const colBlocks = blocks
+            .filter(b => b.x === colX)
+            .sort((a, b) => a.y - b.y);
+
+        for (let i = 0; i < colBlocks.length; i++) {
+            const block = colBlocks[i];
+
+            // Calculate how far down this block can fall
+            let targetY = block.y;
+            let nextY = block.y + BLOCK_HEIGHT;
+
+            while (
+                nextY < canvas.height &&
+                !getBlockAt(colX, nextY)
+            ) {
+                targetY = nextY;
+                nextY += BLOCK_HEIGHT;
+            }
+
+            if (targetY !== block.y) {
+                fallingBlocks++;
+
+                // Animate or instantly move down
+                block.y = targetY;
+
+                // After dropping, check for possible merge
+                setTimeout(() => {
+                    mergeBlocks(block, () => {
+                        fallingBlocks--;
+                        if (fallingBlocks === 0 && callback) {
+                            callback(); // Call only once all gravity updates finish
+                        }
+                    });
+                }, 100);
+            }
+        }
+    }
+
+    // If nothing needed to fall, still call the callback
+    if (fallingBlocks === 0 && callback) {
+        callback();
+    }
+} // applyGravity
+
+
+// Shake the screen!
+function shakeScreen(duration = 300, intensity = 5) {
+    const startTime = performance.now();
+
+    function doShake(currentTime) {
+        const elapsed = currentTime - startTime;
+
+        if (elapsed < duration) {
+            const dx = (Math.random() - 0.5) * intensity * 2;
+            const dy = (Math.random() - 0.5) * intensity * 2;
+
+            ctx.save();
+            ctx.translate(dx, dy);
+            drawGame(); // redraw everything with offset
+            ctx.restore();
+
+            requestAnimationFrame(doShake);
+        } else {
+            // Final redraw to reset back to normal
+            drawGame();
+        }
+    }
+
+    requestAnimationFrame(doShake);
+} // shakeScreen
+
+
+// Fire the blaster Block instead of dropping it
+function fireBlaster(x, y) {
+
+    if (sfxOn) laserSound.play();
+
+    // Find the bottom of the laser path
+    const columnBlocks = blocks
+        .filter(b => b.x === x)
+        .sort((a, b) => a.y - b.y);
+
+    const targetBlock = columnBlocks.find(b => b.y > y);
+    if (targetBlock) {
+        // Destroy topmost block in column with an explosion animation
+        explodeBlock(targetBlock, () => {
+            // optional callback
+        }); 
+        if (targetBlock && targetBlock.value) {
+            score+= targetBlock.value;
+            spawnScorePopup(targetBlock.x + BLOCK_WIDTH/2, targetBlock.y, targetBlock.value);
+        }
+    }
+
+    // Store laser visuals so we can draw the beam
+    const laserBottom = targetBlock ? targetBlock.y : canvas.height;
+
+    activeLaser = {
+        x,
+        y1: y + BLOCK_HEIGHT,
+        y2: laserBottom
+    };
+
+    setTimeout(() => {
+        activeLaser = null;
+    }, LASER_DURATION);
+} // fireBlaster
+
+
+function snapToGridPosition(value) {
+    const gridSize = BLOCK_HEIGHT;  // Assuming blocks are aligned to grid based on BLOCK_HEIGHT
+    return Math.round(value / gridSize) * gridSize;  // Snap to the nearest grid position
+}
+
+function animateSwap(block, blockA, blockB, callback) {
+
+    const centerY = (blockA.y + blockB.y) / 2;
+    const radius = BLOCK_HEIGHT / 2;  // Arc about center of block
+    let step = 0;
+    const totalSteps = 20; // Speed of the swap (adjust if needed)
+    const angleStep = Math.PI / totalSteps;
+
+    // Create new blocks and place them temporarily above the grid
+    const newBlockA = new Block(blockA.x, blockA.y, blockA.spriteIndex);
+    const newBlockB = new Block(blockB.x, blockB.y, blockB.spriteIndex);
+
+    // Remove both original target blocks from the grid before starting the animation
+    blocks = blocks.filter(b => b !== blockA && b !== blockB);
+
+    // Add the new blocks above other blocks
+    blocks.push(newBlockA);
+    blocks.push(newBlockB);
+
+    // Start the animation
+    function animateStep() {
+        const angle = angleStep * step;
+        const offsetX = radius * Math.sin(angle);
+        const offsetY = radius * Math.cos(angle);
+
+        // Move the blocks along the arc by updating their x and y properties
+        newBlockA.x = blockA.x + offsetX;
+        newBlockA.y = centerY - offsetY;
+
+        newBlockB.x = blockB.x - offsetX;
+        newBlockB.y = centerY + offsetY;
+
+        step++;
+
+        if (step <= totalSteps) {
+            requestAnimationFrame(animateStep);  // Continue animation
+        } else {
+            // Animation complete, move blocks to their final positions
+            newBlockA.y = snapToGridPosition(blockB.y);  // Snap y position to grid
+            newBlockB.y = snapToGridPosition(blockA.y);  // Snap y position to grid
+
+            // Add a slight pause before applying gravity
+            setTimeout(() => {
+                // Apply gravity and merge blocks after the pause
+                applyGravity(() => {
+                    mergeBlocks(newBlockA);
+                    mergeBlocks(newBlockB);
+                });
+
+                swapInProgress = false;  // End the animation
+                if (callback) callback();
+            }, 300);  // Pause for 500ms before applying gravity
+        }
+    } // animateStep
+
+    animateStep();  // Start the animation
+
+} // animateSwap
+
+
+//====================
+// Special Handlers
+//====================
+
+
+// Handle the Bug special block
+function doBug(block, callback) {
+    
+    // Animate a flickering effect for the Bug block
+    animateBug(block, () => {
+        // Continue with the normal block logic after flickering
+        if (callback) callback();  // Ensure this callback is called to continue the game logic
+    });
+
+    blockBelow = getBlockBelow(block);
+
+    // Special behavior if the block below is a Wild
+    if (blockBelow?.type === "Wild") {
+        
+        wildSound.play();
+        
+        // Remove both blocks (Bug and Wild)
+        removeBlock(blockBelow);
+        removeBlock(block);
+        
+        return callback?.();
+    }
+
+    // Only play the bug sound if we DON'T land on a Wild
+    bugSound.play();
+
+    return callback?.();
+
+} // doBug
+
+
+// Handle the Wild special block
+function doWild(block, callback) {
+    
+    blockBelowType = getBlockBelow(block).blockType;
+
+    // Special behavior if the block below is a Bug block
+    if (blockBelowType?.type === "Bug") {
+        // Remove both blocks (Wild and Bug)
+        removeBlock(blockBelow);
+        wildSound.play();
+        removeBlock(block);
+        return callback?.();
+    }
+
+    return callback?.();
+
+} // doWild
+
+
+// Handle the Swap special block
+function doSwap(block, callback) {
+
+    // Remove the Swap block itself
+    removeBlock(block);
+
+    const x = block.x;
+    const y = block.y;
+
+    const blockBelow = getBlockAt(x, y + BLOCK_HEIGHT);
+    const blockTwoBelow = getBlockAt(x, y + 2 * BLOCK_HEIGHT);
+
+    // If there aren't 2 blocks to swap
+    if (!blockBelow || !blockTwoBelow) {
+        failSound.play();
+        return callback?.();
+    }
+
+    // Track animation state
+    swapInProgress = true;
+
+    const topBlock = blockBelow;
+    const bottomBlock = blockTwoBelow;
+
+    // Play sound effect
+    swapSound.play();
+
+    // Run the animated swap (with merge after)
+    animateSwap(block, topBlock, bottomBlock, () => {
+        swapInProgress = false;
+        if (callback) callback();
+    });
+} //doSwap
+
+
+// Handle the Bomb special block
+function doBomb(block, callback) {
+    const x = block.x;
+    const y = block.y;
+
+    const blockBelowIndex = blocks.findIndex(b => b.x === x && b.y === y + BLOCK_HEIGHT);
+
+    // Remove the bomb block itself
+    const index = blocks.indexOf(block);
+    if (index !== -1) {
+        blocks.splice(index, 1);
+    }
+
+    // If thereâ€™s a block below, destroy it
+    if (blockBelowIndex !== -1) {
+        const removedBlock = blocks[blockBelowIndex];
+
+        blocks.splice(blockBelowIndex, 1); // Actually remove the block
+        if (sfxOn) bombSound.play();
+
+        // Animate the explosion
+        explodeBlock(removedBlock);
+        console.log("Bomb destroyed:", removedBlock.type);
+
+        // Update score and draw points floating up
+        if (removedBlock && removedBlock.value) {
+            score+= removedBlock.value;
+            spawnScorePopup(removedBlock.x + BLOCK_WIDTH/2, removedBlock.y, removedBlock.value);
+        }
+
+    } else {
+        if (sfxOn) failSound.play();
+        console.log("Nothing to bomb");
+    }
+
+    if (typeof callback === "function") {
+        callback();
+    }
+} // doBomb
+
+
+// Handle the Magnet special block
+function doMagnet(block, callback) {
+
+    // Play sound
+
+    // Alternate behavior, only randomizes value of single block
+    /*
+    const blockBelow = getBlockAt(block.x, block.y + BLOCK_HEIGHT);
+    if (!blockBelow || blockTypes[blockBelow.spriteIndex].value === null) {
+        removeBlock(block); // Nothing to scramble, just remove magnet
+        return callback?.();
+    }
+
+    const numericBlocks = blockTypes.filter(bt => bt.value !== null);
+    let scrambleCount = 6;
+    let scrambleIndex = 0;
+
+    const scrambleInterval = setInterval(() => {
+        if (scrambleIndex >= scrambleCount) {
+            clearInterval(scrambleInterval);
+            removeBlock(block); // Remove magnet
+            return callback?.();
+        }
+
+        const randomType = numericBlocks[Math.floor(Math.random() * numericBlocks.length)];
+        blockBelow.spriteIndex = blockTypes.findIndex(bt => bt.type === randomType.type);
+        scrambleIndex++;
+    }, 80);
+
+    return;
+    */
+
+    // Scramble all numeric blocks in the same column
+    const colX = block.x;
+    const colBlocks = blocks
+        .filter(b => b.x === colX && b !== block)
+        .sort((a, b) => a.y - b.y); // Top to bottom
+
+    if (colBlocks.length <= 1) {
+        if (sfxOn) failSound.play();
+        removeBlock(block); // Nothing to do
+        return callback?.();
+    }
+
+    // Play the magnet sound only if there are blocks to scramble
+    if (sfxOn) magnetSound.play();
+
+    // Create a shuffled version of the current spriteIndexes
+    const originalIndexes = colBlocks.map(b => b.spriteIndex);
+    const shuffledIndexes = [...originalIndexes];
+    for (let i = shuffledIndexes.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [shuffledIndexes[i], shuffledIndexes[j]] = [shuffledIndexes[j], shuffledIndexes[i]];
+    }
+
+    // Flicker animation (randomize sprites temporarily)
+    let flickerCount = 0;
+    const maxFlickers = 6;
+    const flickerInterval = setInterval(() => {
+        if (flickerCount < maxFlickers) {
+            colBlocks.forEach(b => {
+                const randomIndex = originalIndexes[Math.floor(Math.random() * originalIndexes.length)];
+                b.spriteIndex = randomIndex;
+            });
+            flickerCount++;
+        } else {
+            clearInterval(flickerInterval);
+
+            // Apply final shuffled spriteIndexes
+            colBlocks.forEach((b, i) => {
+                b.spriteIndex = shuffledIndexes[i];
+            });
+
+            // Remove the magnet block itself
+            removeBlock(block);
+
+            // Attempt merges top-down
+            let mergeIndex = 0;
+            function mergeNext() {
+                if (mergeIndex < colBlocks.length) {
+                    mergeBlocks(colBlocks[mergeIndex], () => {
+                        mergeIndex++;
+                        mergeNext();
+                    });
+                } else {
+                    callback?.();
+                }
+            }
+
+            mergeNext();
+        }
+    }, 80);
+} // doMagnet
+
+
+// Handle the Zap special block
+function doZap(block, callback = null) {
+    zapInProgress = false;
+    const targetY = block.y + BLOCK_HEIGHT; // Row below the zap block
+    const centerX = block.x; // The X position of the block landed on
+    const step = BLOCK_WIDTH;
+    const positionsToZap = []; // Must be defined here
+
+    // Check if there's anything to zap at all
+    const blockBelow = getBlockAt(centerX, targetY);
+
+    // If no block is landed on
+    if (!blockBelow) {
+        if (sfxOn) failSound.play();
+        removeBlock(block);
+        return callback?.();
+    }
+
+    if (sfxOn) zapSound.play();
+    shakeScreen(300, 4);
+
+    // Start with the block directly below
+    positionsToZap.push({ x: centerX, y: targetY });
+
+    // Collect blocks to the left
+    for (let x = centerX - step; x >= 0; x -= step) {
+        const b = getBlockAt(x, targetY);
+        if (b) {
+            positionsToZap.push({ x, y: targetY });
+        } else {
+            break;
+        }
+    } // collect left
+
+    // Collect blocks to the right
+    for (let x = centerX + step; x < canvas.width; x += step) {
+        const b = getBlockAt(x, targetY);
+        if (b) {
+            positionsToZap.push({ x, y: targetY });
+        } else {
+            break;
+        }
+    } // collect right
+
+    // Draw the zap effect and remove the zapped blocks
+    animateZap(centerX, targetY, positionsToZap, () => {
+
+        // Remove the blocks after animation
+        positionsToZap.forEach(pos => {
+            const blockToRemove = getBlockAt(pos.x, pos.y);
+            
+            // Update score and spawn floating points
+            if (blockToRemove && blockToRemove.value) {
+                score+= blockToRemove.value;
+                spawnScorePopup(blockToRemove.x + BLOCK_WIDTH/2, blockToRemove.y, blockToRemove.value);
+            }
+
+            if (blockToRemove) removeBlock(blockToRemove);
+        });
+
+        // Remove the Zap block itself
+        removeBlock(block);
+
+        if (callback) callback();
+    });
+
+} // doZap
+
+
+// Handle the Nuke special block
+function doNuke(block, callback) {
+
+    const columnBlocks = blocks
+        .filter(b => b.x === block.x)
+        .sort((a, b) => a.y - b.y); // Top-down
+
+    const delayStep = 100; // time between starting each explosion
+    let completed = 0;
+
+    if (columnBlocks.length === 0) {
+        if (sfxOn) failSound.play();
+        return callback?.();
+    }
+
+    if (sfxOn) nukeSound.play();
+    shakeScreen(500, 8);
+
+    columnBlocks.forEach((targetBlock, index) => {
+        const delay = index * delayStep;
+
+        setTimeout(() => {
+            explodeBlock(targetBlock, () => {
+                completed++;
+                if (completed === columnBlocks.length) {
+
+                    // Remove the Nuke block itself
+                    removeBlock(block);
+                    callback?.();
+                }
+            });
+        }, delay);
+        
+        // Update score and draw points floating up
+        if (targetBlock && targetBlock.value) {
+            score+= targetBlock.value;
+            spawnScorePopup(targetBlock.x + BLOCK_WIDTH/2, targetBlock.y, targetBlock.value);
+        }
+    });
+}  // doNuke
+
+
+// Handle the Blaster special block
+function doBlaster(block, callback) {
+    
+    // Mosts blaster logic is handled elsewhere
+    
+    // Make blaster disappears once it lands
+    explodeBlock(block);
+
+    return callback?.();
+
+} // doBlaster
+
+
+// Combine blocks of matching value and handle special blocks
+function mergeBlocks(block, callback = null) {
+    if (!block) return;
+
+    const blockType = blockTypes[block.spriteIndex];
+    const blockBelow = getBlockAt(block.x, block.y + BLOCK_HEIGHT);
+    const blockBelowType = blockBelow ? blockTypes[blockBelow.spriteIndex] : null;
+
+    // Custom behaviors for special blocks
+    switch (blockType.type) {
+        case "Bug":
+            return doBug(block, callback);
+        case "Wild":
+            if (blockBelowType?.type === "Bug") {
+                // Remove both blocks (Wild + Bug)
+                removeBlock(blockBelow);
+                wildSound.play();
+                removeBlock(block);
+                return callback?.();
+            }
+            break;
+        case "Swap":
+            return doSwap(block, callback);
+        case "Bomb":
+            return doBomb(block, callback);
+        case "Magnet":
+            return doMagnet(block, callback);
+        case "Zap":
+            return doZap(block, callback);
+        case "Nuke":
+            return doNuke(block, callback);
+        case "Blaster":
+            return doBlaster(block, callback);
+    }
+
+    // Proceed with standard merge logic
+    if (blockBelow) {
+
+        const isWild = blockType.type === "Wild" || blockBelowType?.type === "Wild";
+        const bothNumeric = blockType.value !== null && blockBelowType?.value !== null;
+        const valuesEqual = blockType.value === blockBelowType?.value;
+
+        // We can merge if at least one of the blocks is wild, or they are the same number
+        const canMerge = isWild || (bothNumeric && valuesEqual);
+
+
+        if (canMerge) {
+
+            removeBlock(blockBelow);
+            block.y += BLOCK_HEIGHT;
+
+            const baseValue = blockType.value ?? blockBelowType?.value ?? 0;
+            const upgradedValue = baseValue * 2;
+            const newIndex = blockTypes.findIndex(bt => bt.value === upgradedValue);
+
+            if (newIndex !== -1) {
+
+                block.spriteIndex = newIndex;
+
+                // Update the score and draw the floating points
+                score += upgradedValue;
+                spawnScorePopup(block.x + BLOCK_WIDTH / 2, block.y, upgradedValue);
+
+                if (sfxOn) mergeSound.play();
+                console.log("Merge:", blockTypes[block.spriteIndex].type);
+
+                return setTimeout(() => {
+                    mergeBlocks(block, callback); // <== Recursive merge call
+                }, 100);
+
+            } else {
+                // Special handling for max merge of 256 blocks
+                // This needs more fanfare
+
+                if (sfxOn) mergeSound.play(); 
+                if (sfxOn) successSound.play(); // We've made a byte!
+
+                score += upgradedValue; // Still give points!
+                spawnScorePopup(block.x + BLOCK_WIDTH / 2, block.y, upgradedValue);
+                console.log("256!");
+                
+                // Remove the merged block entirely for now
+                removeBlock(block);
+                
+                return setTimeout(() => {
+                    mergeBlocks(block, callback); // <== Recursive merge call
+                }, 100);
+            }
+        }
+    } // standard merge logic
+
+    // No merge occurred
+    if (callback) callback();
+} // mergeBlocks
+
+
+// Find the location of where the block would land if dropped
+function getGhostPosition() {
+    if (!activeBlock) return null;
+
+    let ghostX = activeBlock.x;
+    let ghostY = 0;
+
+    for (let y = 0; y <= canvas.height - BLOCK_HEIGHT; y += BLOCK_HEIGHT) {
+        let occupied = blocks.some(b => b.x === ghostX && b.y === y);
+        if (!occupied) {
+            ghostY = y;
+        } else {
+            break;
+        }
+    }
+
+    return { x: ghostX, y: ghostY };
+
+} // getGhostPosition
+
+
+// What we do when the game is over
+function endGame() {
+    gameOver = true;
+    gameRunning = false;
+    gamePaused = false;
+
+    // Check and update high score
+    if (score > highScore) {
+        highScore = score;
+
+        // Store in localStorage if available
+        if (typeof localStorage !== "undefined") {
+            localStorage.setItem("bitCrunchHighScore", highScore);
+        }
+    }
+
+    // Stop the game loop
+    if (animationFrameId) {
+        cancelAnimationFrame(animationFrameId);
+        animationFrameId = null;
+    }
+
+    // Stop active block movement
+    activeBlock = null;
+
+    // Stop block creation
+    clearInterval(countdown);
+
+    // End the music
+    stopMusic();
+
+    // Game over sound effect
+    if (sfxOn) gameOverSound.play();
+
+    // Draw the scoreboard
+    drawScoreboardScreen();
+
+    console.log("Game over!");
+    console.log("Score:     " + score);
+    console.log("Highscore: " + highScore);
+} // endGame
+
+
+// Skip to the next music track
+function nextTrack() {
+    backgroundMusic.pause();
+    currentTrackIndex = (currentTrackIndex + 1) % playlist.length; // Modulus for wraparound
+    backgroundMusic = playlist[currentTrackIndex];
+    backgroundMusic.play();
+    console.log("Next music");
+} // nextTrack
+
+function toggleSfx() {
+    if (sfxOn) {
+        console.log("SFX off");
+    } else {
+        console.log("SFX on");
+    }
+    sfxOn = !sfxOn;
+}
+
+function toggleMusic() {
+if (musicOn) {
+        backgroundMusic.pause();
+        console.log("Music off");
+    } else {
+        backgroundMusic.play();
+        console.log("Music on");
+    }
+    musicOn = !musicOn;
+} // toggleMusic
+
+
+// Move the active block left
+function moveBlockLeft() {
+    if (!activeBlock || dropInProgress) return;
+
+    let newX = activeBlock.x - BLOCK_WIDTH;
+
+    let collision = blocks.some(b => 
+        b.x === newX &&
+        b.y < activeBlock.y + BLOCK_HEIGHT &&
+        b.y + BLOCK_HEIGHT > activeBlock.y
+    );
+
+    if (newX >= 0 && !collision) {
+        activeBlock.x = newX;
+        if (sfxOn) leftSound.play();
+    }
+} // moveBlockLeft
+
+// Move the active block right
+function moveBlockRight() {
+    if (!activeBlock || dropInProgress) return;
+
+    let newX = activeBlock.x + BLOCK_WIDTH;
+
+    let collision = blocks.some(b => 
+        b.x === newX &&
+        b.y < activeBlock.y + BLOCK_HEIGHT &&
+        b.y + BLOCK_HEIGHT > activeBlock.y
+    );
+
+    if (newX < canvas.width && !collision) {
+        activeBlock.x = newX;
+        if (sfxOn) rightSound.play();
+    }
+} // moveBlockRight()
+
+
+// Immediately drop the active block
+function dropBlock() {
+    if (!activeBlock || dropInProgress) return;
+
+    // Special handling for the Blaster block
+    const blockType = blockTypes[activeBlock.spriteIndex];
+    if (blockType.type === "Blaster") {
+        fireBlaster(activeBlock.x, activeBlock.y);
+        return; // Do NOT drop the blaster
+    }
+
+    dropInProgress = true; // Prevent side-to-side movement while dropping
+    let maxY = canvas.height - BLOCK_HEIGHT;
+    let columnBlocks = blocks.filter(b => b.x === activeBlock.x).sort((a, b) => a.y - b.y);
+
+    // Play the drop sound effect
+    if (sfxOn) dropSound.play();
+
+    for (let b of columnBlocks) {
+        if (b.y > activeBlock.y) {
+            maxY = Math.min(maxY, b.y - BLOCK_HEIGHT);
+            break;
+        }
+    }
+
+    let dropInterval = setInterval(() => {
+        if (!activeBlock) {
+            clearInterval(dropInterval);
+            dropInProgress = false;
+            return;
+        }
+
+        if (activeBlock.y + DROP_SPEED < maxY) {
+            activeBlock.y += DROP_SPEED;
+        } else {
+            clearInterval(dropInterval);
+            activeBlock.y = Math.floor(maxY / BLOCK_HEIGHT) * BLOCK_HEIGHT;
+
+            let placedBlock = new Block(activeBlock.x, activeBlock.y, activeBlock.spriteIndex);
+
+            blocks.push(placedBlock);
+
+            // Update score and draw points floating up
+            if (placedBlock && placedBlock.value) {
+                score+= placedBlock.value;
+                spawnScorePopup(placedBlock.x + BLOCK_WIDTH/2, placedBlock.y, placedBlock.value);
+            }
+
+            let landedRow = 12 - Math.floor(placedBlock.y / BLOCK_HEIGHT);
+            console.log("Placed in row " + landedRow);
+
+            activeBlock = null;
+
+            if (sfxOn) placeSound.play();
+
+            setTimeout(() => {
+                mergeBlocks(placedBlock, () => {
+                    dropInProgress = false; // Re-enable movement
+                    if (!activeBlock && gameRunning) {
+                        createBlock();
+                    }
+                });
+            }, MERGE_DELAY); // How long to pause before merging
+        }
+    }, DROP_INTERVAL); // Influences drop speed and smoothness
+
+    console.log("Drop");
+
+} // dropBlock
+
+
+// Send back a weighted random value or special type
+function getWeightedBlockValue() {
+    const blockCounts = {};
+    const totalBlocks = blocks.length;
+
+    // Count how many blocks of each value are on the board
+    blocks.forEach(block => {
+        const def = blockTypes[block.spriteIndex];
+        if (def && def.value !== null) {
+            blockCounts[def.value] = (blockCounts[def.value] || 0) + 1;
+        }
+    });
+
+    const maxValue = Math.max(...Object.keys(blockCounts).map(Number), 1);
+
+    // Weighted probabilities for standard blocks
+    const probabilities = {
+        1: 50,
+        2: 30,
+        4: 15,
+        8: 5,
+    };
+
+    if (maxValue >= 8) probabilities[8] = 10;
+    if (maxValue >= 16) probabilities[16] = 5;
+    if (maxValue >= 32) probabilities[32] = 3;
+    if (maxValue >= 64) probabilities[64] = 1;
+
+    const totalWeight = Object.values(probabilities).reduce((a, b) => a + b, 0);
+    const roll = Math.random() * 100;
+
+    const SPECIAL_BLOCK_CHANCE = 10; // % chance of a special block
+
+    // Randomly pick if the block will be special
+    if (roll < SPECIAL_BLOCK_CHANCE) {
+        const enabledSpecials = blockTypes
+            .map((bt, i) => ({ ...bt, index: i }))
+            .filter(bt => bt.value === null && bt.enabled);
+
+        if (enabledSpecials.length > 0) {
+            const chosen = enabledSpecials[Math.floor(Math.random() * enabledSpecials.length)];
+            return chosen.index;
+        }
+    }
+
+    // Otherwise, pick from numbered blocks using weighted values
+    const weightedList = [];
+
+    for (const value in probabilities) {
+        const weight = probabilities[value];
+        for (let i = 0; i < weight; i++) {
+            weightedList.push(parseInt(value));
+        }
+    }
+
+    const chosenValue = weightedList[Math.floor(Math.random() * weightedList.length)];
+    const index = blockTypes.findIndex(bt => bt.value === chosenValue);
+    return index !== -1 ? index : 0;
+
+} // getWeightedBlockValue;
+
+
+// Shortcut for turning on and off a global dropshadow style when drawing
+function dropShadow(enable) {
+    if (enable == true) {
+        ctx.save();
+        ctx.shadowColor = 'rgba(0, 0, 0, 0.5)';
+        ctx.shadowOffsetX = 10;
+        ctx.shadowOffsetY = 10;
+        ctx.shadowBlur = 20;
+    } else {
+        ctx.restore();
+    }
+} //dropShadow
+
+
+// Show or hide the pause screen
+function togglePause() {
+
+    if (gameRunning && !gameOver) {
+        if (!gamePaused) {  // Pausing the game
+            gamePaused = true;
+            backgroundMusic.pause();
+            if (sfxOn) pauseSound.play();
+            console.log("Game paused");
+            drawPauseScreen();
+        } else {  // Unpausing the game
+            gamePaused = false;
+            console.log("Game resumed");
+            backgroundMusic.play();
+
+            // If the game loop stopped, restart it
+            if (!animationFrameId) {
+                gameLoop();
+            }
+        }
+    }
+} // togglePause
+
+
+// Show or hide the ghost block preview aid
+function toggleGhost() {
+    console.log("Toggle ghost");
+    showGhostBlock = !showGhostBlock;
+} // toggleGhost
+
+
+// Start the music
+function startMusic() {
+    if(musicOn) {
+        if (backgroundMusic.paused) {
+            backgroundMusic.play();
+        }
+    }
+} // startMusic
+
+
+// Stop the music
+function stopMusic() {
+    backgroundMusic.pause();
+    backgroundMusic.currentTime = 0; // Reset to the beginning
+} // stopMusic
+
+
+// DIY debugger overlay for mobile since the console isn't available
+function logDebug(message) {
+    let debugDiv = document.getElementById("debugLog");
+    if (debugDiv) {
+        debugDiv.innerHTML += message + "<br>";
+        debugDiv.scrollTop = debugDiv.scrollHeight; // Auto-scroll to newest logs
+    }
+} // logDebug
+
+
+// ====================
+// MOUSE AND KEYBOARD
+// ====================
+
+
+// General click action
+canvas.addEventListener("click", function(event) {
+    if (gameOver) {
+        gameOver = false; // Ensure game over state resets
+        resetGame();
+        return;
+    }
+
+    if (gamePaused) {
+        gamePaused = false;
+        backgroundMusic.play();
+        requestAnimationFrame(gameLoop);
+        return;
+    }
+    
+    const rect = canvas.getBoundingClientRect();
+    const mouseX = event.clientX - rect.left;
+    const mouseY = event.clientY - rect.top;
+    
+    // Play button clicked
+    if (!gameRunning && mouseX >= 50 && mouseX <= 350 && mouseY >= 450 && mouseY <= 570) {
+        welcomeMusic.pause();
+        welcomeMusic.currentTime = 0; // Reset to the beginning
+        
+        resetGame();
+        if (sfxOn) dropSound.play();
+
+    } else {
+        dropBlock();
+    }
+}); // click
+
+
+// Check mouse position
+canvas.addEventListener("mousemove", function(event) {
+    if (gamePaused) return; // Prevents the pause screen from being canceled
+
+    const rect = canvas.getBoundingClientRect();
+    const mouseX = event.clientX - rect.left;
+    const mouseY = event.clientY - rect.top;
+
+    // Track previous hover state to prevent unnecessary redraws
+    let previousHoverState = isHoveringPlayButton;
+
+    isHoveringPlayButton = (!gameRunning && countdown === null && 
+        mouseX >= 50 && mouseX <= 350 && mouseY >= 450 && mouseY <= 570);
+
+    // Only redraw if the hover state changed
+    if (previousHoverState !== isHoveringPlayButton) {
+        drawGame();
+    }
+}); // mousemove
+
+
+// Mouse listener for horizontal block movement
+canvas.addEventListener("mousemove", function(event) {
+    if (activeBlock && gameRunning && !gamePaused) {
+        const rect = canvas.getBoundingClientRect();
+        const mouseX = event.clientX - rect.left;
+        let newBlockX = Math.floor(mouseX / BLOCK_WIDTH) * BLOCK_WIDTH;
+
+        if (newBlockX !== activeBlock.x) {
+            if (newBlockX < activeBlock.x) {
+                moveBlockLeft();
+            } else if (newBlockX > activeBlock.x) {
+                moveBlockRight();
+            }
+        }
+    }
+}); // mousemove
+
+
+// Mouseup action for main Play button
+canvas.addEventListener("mouseup", function(event) {
+    if (isClickingPlayButton && isHoveringPlayButton) {
+        isClickingPlayButton = false;
+            resetGame();
+    }
+    isClickingPlayButton = false;
+
+    // Only redraw if not paused
+    if (!gamePaused) {
+        drawGame();
+    }
+}); // mouseup
+
+
+// Right-click to pause
+canvas.addEventListener('mousedown', function(event) {
+    if (event.button === 2) { // Right mouse button
+        event.preventDefault(); // Stop context menu
+        event.stopPropagation(); // Stop any other event from firing
+        togglePause();
+    }
+}); // mousedown
+
+// Prevent default right-click context menu globally
+canvas.addEventListener('contextmenu', function(event) {
+    event.preventDefault();
+}); // right click
+
+
+// Keyboard controls
+document.addEventListener("keydown", function(event) {
+
+    const code = event.code;
+    const isShift = event.shiftKey;
+
+    // Any key on Scoreboard screen goes back to Welcome
+    if (gameOver) {
+        gameOver = false;
+        drawWelcomeScreen();
+        return;
+    }
+
+    // Press enter on Welcome Screen to start game
+    if (!gameRunning && event.key === "Enter") {
+        resetGame();
+        return;
+    }
+
+    // Toggle options
+    if (event.key === "m" || event.key === "M") {
+        toggleMusic();
+    }
+    if (event.key === "f" || event.key === "F") {
+        toggleSfx();
+    }
+
+    // Main action keys
+    if (gameRunning && !gameOver && activeBlock) {
+        switch (event.key) {
+            case "ArrowLeft":
+            case"a":
+            case"A":
+                moveBlockLeft();
+                break;
+            case "ArrowRight":
+            case "d":
+            case "D":
+                moveBlockRight();
+                break;
+            case "ArrowDown":
+            case " ":
+            case "s":
+            case "S":
+                dropBlock();
+                break;
+            case "Escape":
+            case "p":
+            case "P":
+                togglePause(); 
+                break;
+            case "q":
+            case "Q":
+            case "x":
+            case "X":
+                endGame();
+                break;
+            case "g":
+            case "G":
+                toggleGhost();
+                break;
+            }
+    } // Main ation keys
+
+
+    // DEV TOOLS â€” Only run if dev keys are enabled
+    // Manually change the value of a block (cheat mode)
+    if (DEV_KEYS_ENABLED && activeBlock) {
+        if (isShift) {
+            const devSpecialBlockHotkeys = {
+                "Digit1": "Bug",
+                "Digit2": "Wild",
+                "Digit3": "Swap",
+                "Digit4": "Bomb",
+                "Digit5": "Magnet",
+                "Digit6": "Zap",
+                "Digit7": "Nuke",
+                "Digit8": "Blaster"
+            };
+    
+            const targetType = devSpecialBlockHotkeys[code];
+            if (targetType) {
+                const index = blockTypes.findIndex(bt => bt.type === targetType && bt.enabled !== false);
+                if (index !== -1) {
+                    setActiveBlockByIndex(index);
+                } else {
+                    console.warn("Special block undefined or disabled:", targetType);
+                }
+    
+                return; // Exit early so we don't also trigger numeric block logic
+            }
+    
+        } else if (code.startsWith("Digit")) {
+            // Handle numeric blocks: 1â€“9 = 2^0 to 2^8
+            const digit = parseInt(code.replace("Digit", ""));
+            if (digit >= 1 && digit <= 9) {
+                const value = Math.pow(2, digit - 1);
+                const index = blockTypes.findIndex(bt => bt.value === value);
+                if (index !== -1) {
+                    setActiveBlockByIndex(index);
+                } else {
+                    console.warn("Numeric block not found for value:", value);
+                }
+            }
+        }
+    } // Dev cheat keys
+
+}); // Keyboard controls
+
+
+
+// ====================
+// TOUCH CONTROLS
+// ====================
+
+
+let touchStartY = 0;
+let touchEndY = 0;
+let touchStartX = 0;
+let touchEndX = 0;
+let isSwipeDown = false;
+let isSwipeUp = false;
+
+// touchstart event listener
+canvas.addEventListener('touchstart', (event) => {
+    event.preventDefault();  // Prevent default to avoid unwanted behavior (like scrolling)
+
+    // Store the initial touch position (start)
+    touchStartX = event.touches[0].clientX;
+    touchStartY = event.touches[0].clientY;
+
+    // Reset swipe flag on each touchstart
+    isSwipeDown = false;
+    isSwipeUp = false;
+});
+
+// touchmove event listener
+canvas.addEventListener('touchmove', (event) => {
+    event.preventDefault();  // Prevent default to avoid unwanted behavior during touch move
+
+    // Store the current touch position
+    touchEndX = event.touches[0].clientX;
+    touchEndY = event.touches[0].clientY;
+
+    // Check if it's a vertical movement greater than horizontal (this is the swipe gesture)
+    const deltaX = Math.abs(touchEndX - touchStartX);
+    const deltaY = Math.abs(touchEndY - touchStartY);
+
+    // If the vertical movement is larger than the horizontal and exceeds a small threshold, it's a swipe
+    if (deltaY > deltaX && deltaY > 10) {
+        if (touchEndY > touchStartY) {
+            isSwipeDown = true;  // Mark it as a swipe down gesture
+        } else {
+            isSwipeUp = true;    // Mark it as a swipe up gesture
+        }
+    }
+});
+
+// touchend event listener
+canvas.addEventListener('touchend', (event) => {
+    event.preventDefault();  // Prevent default behavior for touchend
+
+    // If swipe-down gesture detected, trigger block drop
+    if (gameRunning && isSwipeDown && touchEndY - touchStartY > 30) {  // Minimum vertical swipe distance for drop
+        dropBlock();  // Trigger block drop action
+    }
+
+    // Detect swipe-up gesture to trigger action
+    if (!gamePaused && isSwipeUp && touchStartY - touchEndY > 30) {  // Minimum vertical swipe distance for swipe up
+        togglePause();
+    }
+
+    // Handle taps for game actions
+    if (!isSwipeDown && !isSwipeUp) {
+        // Tap on Scoreboard screen to return to Welcome screen
+        if (gameOver) {
+            gameOver = false;
+            drawWelcomeScreen(); // Draw the welcome screen
+            return;
+        }
+        
+        // Tap on Welcome screen to start the game
+        if (!gameRunning) {
+            resetGame();  // Start the game
+            return;
+        }
+
+        // Pause/Unpause Game (if on Pause screen)
+        if (gamePaused) {
+            togglePause(); // Pauses/unpauses the game
+            return;
+        }
+
+        // Move Left (if touch is on the left half of the screen)
+        if (gameRunning && !gamePaused && touchEndX < canvas.width / 2) {
+            moveBlockLeft(); // Move block left
+        }
+
+        // Move Right (if touch is on the right half of the screen)
+        if (gameRunning && !gamePaused && touchEndX > canvas.width / 2) {
+            moveBlockRight(); // Move block right
+        }
+    }
+});
+
+// Stop music when you minimize browser on mobile
+window.addEventListener('blur', function() {
+    togglePause();
+});
+
+// ====================
+// LAUNCHING FUNCTIONS
+// ====================
+
+
+// Start the game loop, but only after the sprite sheets load
+spriteSheet.onload = () => {
+    logoSprite.onload = () => {
+        document.fonts.ready.then(() => {
+            drawWelcomeScreen();
+            console.log("It's time to BitCrunch!");
+        });
+    };
+};
+
+// Start up our main framerate refresh
+setInterval(() => {
+    if (gameRunning && !gameOver && !activeBlock) {
+        createBlock();
+    }
+}, REFRESH_RATE);
+
+
+// ====================
+// THE END
+// ====================

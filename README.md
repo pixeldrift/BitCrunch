@@ -96,7 +96,7 @@ There is also a 10% chance of receiving a special block vs. a standard numeric b
 
 ### Features:
 
-~~	•	￼Basic game grid with falling blocks
+	•	￼Basic game grid with falling blocks
 	•	￼Keyboard controls to move active block
 	•	￼Collision detection to prevent overlap
 	•	￼Block merging with recursion
@@ -141,7 +141,7 @@ There is also a 10% chance of receiving a special block vs. a standard numeric b
 	•	￼Destroying blocks adds their value to score also
 	•	￼Animate scores being added by floating off the blocks
 	•	￼Toggle music and sound effects
-~~
+
 
 	•	￼Count sequential merges and give bonus points for combo chains
 	•	￼Increase pitch of sound effect for each combo merge

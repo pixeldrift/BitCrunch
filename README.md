@@ -1,9 +1,10 @@
 # BitCrunch
-A binary falling block game
 
-Play Now: pizar.net/BitCrunch
+## A binary falling block game
 
-Gameplay
+### Play Now: [pizar.net/BitCrunch]
+
+## Gameplay
 
 The game board consists of a grid 4 blocks wide by 12 blocks tall. A random block appears at the top of the board and begins to fall. The player can move it right or left, and optionally drop it immediately.
 
@@ -12,43 +13,44 @@ Stacking two blocks of the same number value makes them merge together and the n
 Occasionally, random special blocks will appear, each one with different characteristics that can help or hinder the player.
 
 
-Controls
+## Controls
 
-Enter			Start Game
-←  A			Move Left
-→  D			Move Right
-↓  S  ␣			Drop Block
-P  Esc			Pause/Resume
+```
+Enter		Start Game
+←  A		Move Left
+→  D		Move Right
+↓  S  ␣		Drop Block
+P  Esc		Pause/Resume
 T			Next Music Track
 M			Toggle Music
 F			Toggle Sound FX
 G			Toggle Ghost
-X  Q			End Game
+X  Q		End Game
+```
 
 Mouse controls are available, but keyboard input is generally recommended for best gameplay. Though the game is not optimized for mobile, gesture controls work too.
 
-Specials
+## Specials
 
-1 – Bug		Doesn’t merge, can only be 
-removed by other specials
+```
+1 – Bug		Doesn’t merge, can only be removed by other specials
 2 – Wild	Merges with any other block
-3 – Swap	Makes the block it lands on swap 
-Positions with the one below it	
+3 – Swap	Makes the block it lands on swap Positions with the one below it	
 4 – Bomb	Destroys any block it lands on
 5 – Magnet	Scrambles the blocks in a column
-6 – Zap		Destroys all touching blocks in a 
-single horizontal row
+6 – Zap		Destroys all touching blocks in a single horizontal row
 7 – Nuke	Destroys all blocks in the column
-8 – Blaster	Doesn’t drop, fires downward 
-destroying blocks
+8 – Blaster	Doesn’t drop, fires downward destroying blocks
+```
 
 
-
-Scoring
+## Scoring
 
 Number blocks range from 1 to 256, doubling in value for each step.
 
+```
 1	2	4	8	16	32	64	128	256
+```
 
 When a block lands and settles on the grid, its value is added to the score. When a block is destroyed, its value is added to the score also.
 
@@ -62,7 +64,7 @@ Two "128" blocks merge → new block is "256" → score increases by 256.
 Should there be combo bonuses for multiple merges in a row? For cascading merges?
 
 
-Block Generation
+## Block Generation
 
 For better gameplay, the value of a newly spawned block is not entirely random. It would be no fun to start off with the highest blocks immediately. To address this, the blocks are given a weighted distribution.
 
@@ -76,22 +78,25 @@ When the game spawns a new block, it picks randomly, but the chance of each bloc
 
 As higher numbers are created through merging, we add the opportunity for those higher numbers to be spawned on new blocks and adjust the probabilities.
 
-  8:	10%
-16:	   5%
- 32:	   3%
+```
+   8:	  10%
+  16:	   5%
+  32:	   3%
 64 >:	   1%
+```
 
 There is also a 10% chance of receiving a special block vs. a standard numeric block. Currently special blocks are entirely random but will eventually also be weighted based on their power.
  
-To Do
+## To Do
 
-Known Bugs:
+### Known Bugs:
 	•	￼Sometimes blocks continue to be drawn after being destroyed by Nuke
 	•	￼Sound continues to play on mobile when browser is minimized
 	•	￼iOS does not allow sound volume adjustment via javascript
 
-Features:
-	•	￼Basic game grid with falling blocks
+### Features:
+
+~~	•	￼Basic game grid with falling blocks
 	•	￼Keyboard controls to move active block
 	•	￼Collision detection to prevent overlap
 	•	￼Block merging with recursion
@@ -115,7 +120,7 @@ Features:
 	◦	￼Wild		Merges with any other block to become the next largest
 	◦	￼Swap		Makes any block it lands on swap with the one below it	
 	◦	￼Bomb		Destroys whatever single block it lands on
-	◦	￼Magnet	Scrambles the block it lands on into a random value
+	◦	￼Magnet		Scrambles the block it lands on into a random value
 	◦	￼Zap		Destroys the entire row for whatever block it lands on
 	◦	￼Nuke		Destroys the entire column	
 	◦	￼Bug		Doesn’t merge, can only be removed other specials
@@ -136,6 +141,8 @@ Features:
 	•	￼Destroying blocks adds their value to score also
 	•	￼Animate scores being added by floating off the blocks
 	•	￼Toggle music and sound effects
+~~
+
 	•	￼Count sequential merges and give bonus points for combo chains
 	•	￼Increase pitch of sound effect for each combo merge
 	•	￼Refine touch gesture controls for mobile
@@ -152,7 +159,7 @@ Features:
 	•	￼Make native iPhone port
 
 
-About
+## About
 
 I am not a programmer! I’m an animator and designer by day and did this just for fun as a learning exercise. BitCrunch is an idea I’ve had in my head for a long time and the graphics in the game are from a sprite sheet I made many years ago. I finally decided to go ahead and try to implement a basic version of the working game as a fun challenge just to see if I could.
 
@@ -165,8 +172,8 @@ pizar.net/BitCrunch/BitCrunch.js
 I tried to keep it as neat and organized as possible, but there are definitely places where I used  inconsistent methods for various parts of the game as I learned new techniques or the logic became more complicated as I added features.
 
 
-Feedback
+## Feedback
 
-I would definitely love for as many people to test it as possible, and give detailed feedback. Whether it be gameplay mechanics, glitches, you encounter, or thoughts on creative aspects like the graphics and sound. There are still things left to be implemented (see To Do above) and I know it’s rough, but hopefully it’s playable and even a little fun. Enjoy!
+I would definitely love for as many people to test it as possible, and give detailed feedback. Whether it be gameplay mechanics, glitches, you encounter, or thoughts on creative aspects like the graphics and sound. There are still things left to be implemented (see [To Do](#to-do) above) and I know it’s rough, but hopefully it’s playable and even a little fun. Enjoy!
 
 

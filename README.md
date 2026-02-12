@@ -1,10 +1,10 @@
 # BitCrunch
 
-## A binary falling block game
-
-### Play Now: [pizar.net/BitCrunch](pizar.net/BitCrunch)
+### A binary falling block game
 
 ## Gameplay
+
+Play Now: [pizar.net/BitCrunch](pizar.net/BitCrunch)
 
 The game board consists of a grid 4 blocks wide by 12 blocks tall. A random block appears at the top of the board and begins to fall. The player can move it right or left, and optionally drop it immediately.
 

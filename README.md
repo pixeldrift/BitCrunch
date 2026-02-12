@@ -167,7 +167,7 @@ Since I’m a hobbyist rather than an actual software developer, every feature a
 
 This initial version was written purely in plain JavaScript canvas without any frameworks. You can view the code here:
 
-** [pizar.net/BitCrunch/BitCrunch.js] **
+[pizar.net/BitCrunch/BitCrunch.js]
 
 I tried to keep it as neat and organized as possible, but there are definitely places where I used  inconsistent methods for various parts of the game as I learned new techniques or the logic became more complicated as I added features.
 

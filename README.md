@@ -2,7 +2,7 @@
 
 ## A binary falling block game
 
-### Play Now: [pizar.net/BitCrunch]
+### Play Now: [pizar.net/BitCrunch](pizar.net/BitCrunch)
 
 ## Gameplay
 

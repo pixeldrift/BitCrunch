@@ -4,7 +4,7 @@
 
 ## Gameplay
 
-Play Now: [pizar.net/BitCrunch](pizar.net/BitCrunch)
+Play Now: [pizar.net/BitCrunch](https://pizar.net/BitCrunch)
 
 The game board consists of a grid 4 blocks wide by 12 blocks tall. A random block appears at the top of the board and begins to fall. The player can move it right or left, and optionally drop it immediately.
 
@@ -167,7 +167,7 @@ Since I’m a hobbyist rather than an actual software developer, every feature a
 
 This initial version was written purely in plain JavaScript canvas without any frameworks. You can view the code here:
 
-**[pizar.net/BitCrunch/BitCrunch.js](pizar.net/BitCrunch/BitCrunch.js)**
+**[pizar.net/BitCrunch/BitCrunch.js](https://pizar.net/BitCrunch/BitCrunch.js)**
 
 I tried to keep it as neat and organized as possible, but there are definitely places where I used  inconsistent methods for various parts of the game as I learned new techniques or the logic became more complicated as I added features.
 

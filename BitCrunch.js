@@ -800,10 +800,10 @@ function drawGameScreen() {
 
         ctx.textAlign = "left";
         if (musicOn) {
-            ctx.fillText("â™«", 10, 38);
+            ctx.fillText("♪", 10, 38);
         }
         if (sfxOn) {
-            ctx.fillText("FX", 358, 38);
+            ctx.fillText("\u266B", 358, 38);
         }
     } // Scorebar
 

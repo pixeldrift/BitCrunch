@@ -1,3 +1,23 @@
+//
+//                        â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆ
+//                        â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆ
+//                        â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆ
+//                   â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆ
+//                       â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆ   
+//                          â–ˆâ–ˆâ–ˆ
+//      â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆ
+//  
+//      â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆ       â–ˆâ–ˆâ–ˆ    â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆ
+//      â–ˆâ–ˆâ–ˆ         â–ˆâ–ˆâ–ˆ     â–ˆâ–ˆâ–ˆ          â–ˆâ–ˆâ–ˆ
+//      â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆ       â–ˆâ–ˆâ–ˆ          â–ˆâ–ˆâ–ˆ
+//      â–ˆâ–ˆâ–ˆ         â–ˆâ–ˆâ–ˆ     â–ˆâ–ˆâ–ˆ          â–ˆâ–ˆâ–ˆ
+//      â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆ       â–ˆâ–ˆâ–ˆ          â–ˆâ–ˆâ–ˆ
+//  
+//      â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆ  â–ˆâ–ˆâ–ˆâ–ˆâ–ˆ  â–ˆ    â–ˆ  â–ˆâ–ˆ  â–ˆ  â–ˆâ–ˆâ–ˆâ–ˆâ–ˆ  â–ˆ    â–ˆ
+//      â–ˆ       â–ˆ      â–ˆ    â–ˆ  â–ˆ â–ˆ â–ˆ  â–ˆ      â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆ
+//      â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆ  â–ˆ      â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆ  â–ˆ  â–ˆâ–ˆ  â–ˆâ–ˆâ–ˆâ–ˆâ–ˆ  â–ˆ    â–ˆ
+//
+//      â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆ
 //  
 //      BitCrunch - A binary falling block game
 //      (C) 2025 Nathan Pizar
@@ -482,19 +502,12 @@ function explodeBlock(block, callback = null) {
 // Drawing Functions
 // ====================
 
-const backgroundCache = document.createElement("canvas");
-const bgCtx = backgroundCache.getContext("2d");
-
-// Draw static grid once
-bgCtx.drawImage(spriteSheet, gameGrid.x, gameGrid.y, ...);
 
 // Draw the game
 function drawGame() {
-  
-    ctx.drawImage(backgroundCache, 0, 0);
-  
+
     // Start with a blank canvas
-    // ctx.clearRect(0, 0, canvas.width, canvas.height);
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
     // Set the font right up front
     ctx.font = "24px Silkscreen";
 
@@ -885,6 +898,7 @@ function drawBlock(block) {
     );
 } //drawBlock
 
+
 function drawLaserBeam() {
     if (!activeBlock || activeBlock.type !== "Blaster") return;
 
@@ -1104,6 +1118,7 @@ function fillGrid(blockType, speed, callback = null) {
     drawNextBlock();
     
 } // fillGrid
+
 
 
 // ====================
@@ -2469,6 +2484,7 @@ setInterval(() => {
         createBlock();
     }
 }, REFRESH_RATE);
+
 
 
 // ====================

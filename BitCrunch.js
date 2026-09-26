@@ -491,7 +491,7 @@ function explodeBlock(block, callback = null) {
                 callback();
             }
         }
-    };
+    }
 
     animate();
 } // explk

@@ -29,6 +29,7 @@ const VERSION = "v0.02.2 (Beta)";
 // Version notes:
 // 0.02.1 - Fixed ASD controls 
 // 0.02.2 - Reduced music volume levels, pause game when switching away from window
+// 0.02.3 - Performance pass: Web Audio sfx, single draw per frame, no per-frame shadowBlur, Pointer Events touch controls
 //
 // Known bugs:
 // Sometimes the Nuke removes blocks but they are still drawn on the grid
@@ -193,6 +194,69 @@ const laserSound = new Audio("audio/sfx/laserSound.mp3");
 const failSound = new Audio("audio/sfx/failSound.mp3");
 const successSound = new Audio("audio/sfx/successSound.mp3");
 const smallBoomSound = new Audio("audio/sfx/smallBoomSound.mp3");
+
+// ====================
+// SOUND EFFECTS
+// ====================
+
+// Plays short sound effects through the Web Audio API. Each effect is decoded
+// once, then every play is a cheap one-shot buffer source, so rapid or
+// overlapping effects (blaster shots, explosions) don't restart an <audio>
+// element or re-decode an MP3 mid-frame. Falls back to the plain <audio>
+// element if Web Audio isn't available or hasn't unlocked yet.
+class SfxPlayer {
+    constructor(sounds) {
+        const AudioCtx = window.AudioContext || window.webkitAudioContext;
+        this.context = AudioCtx ? new AudioCtx() : null;
+        this.buffers = new Map(); // <audio> element -> decoded AudioBuffer
+
+        if (!this.context) return;
+
+        sounds.forEach(sound => this.load(sound));
+
+        // iOS keeps the audio context suspended until a user gesture
+        const unlock = () => {
+            if (this.context.state === "suspended") this.context.resume();
+        };
+        ["pointerdown", "touchend", "click", "keydown"].forEach(type =>
+            window.addEventListener(type, unlock, { passive: true })
+        );
+    } // constructor
+
+    load(sound) {
+        fetch(sound.src)
+            .then(response => response.arrayBuffer())
+            .then(data => new Promise((resolve, reject) =>
+                this.context.decodeAudioData(data, resolve, reject)))
+            .then(buffer => this.buffers.set(sound, buffer))
+            .catch(() => {}); // Fallback to the <audio> element in play()
+    } // load
+
+    play(sound) {
+        if (!sfxOn) return;
+
+        const buffer = this.buffers.get(sound);
+        if (buffer && this.context.state === "running") {
+            const source = this.context.createBufferSource();
+            source.buffer = buffer;
+            source.connect(this.context.destination);
+            source.start(0);
+            return;
+        }
+
+        // Fallback
+        sound.currentTime = 0;
+        sound.play().catch(() => {});
+    } // play
+} // class SfxPlayer
+
+const sfx = new SfxPlayer([
+    welcomeSound, startSound, leftSound, rightSound, dropSound, placeSound,
+    mergeSound, pauseSound, gameOverSound, bugSound, wildSound, swapSound,
+    bombSound, magnetSound, zapSound, nukeSound, laserSound, failSound,
+    successSound, smallBoomSound
+]);
+
 
 // Define our music files
 const musicA = new Audio("audio/music/music-a.mp3");
@@ -387,7 +451,7 @@ function updateBlocks() {
         activeBlock = null;
 
         // Sound effect for when the block lands
-        if (sfxOn) placeSound.play();
+        sfx.play(placeSound);
 
         // Delay merging to ensure proper placement
         setTimeout(() => {
@@ -408,7 +472,7 @@ function updateBlocks() {
 // Start the intro countdown
 function startCountdown() {
 
-    if (sfxOn) startSound.play(); // Play the countdown sound effect
+    sfx.play(startSound); // Play the countdown sound effect
     countdownValue = 3; // Reset countdown value
     drawGame(); // Immediately draw the countdown at 3
 
@@ -470,12 +534,12 @@ function explodeBlock(block, callback = null) {
     // Track this block as actively exploding
     explodingBlocks.push({ x: block.x, y: block.y, frame: 0 });
 
-    if (sfxOn) smallBoomSound.play();
+    sfx.play(smallBoomSound);
     const animate = () => {
         if (currentFrame < frames.length) {
             const explosion = explodingBlocks.find(e => e.x === block.x && e.y === block.y);
             if (explosion) explosion.frame = currentFrame;
-            drawGame();
+            requestDraw();
             currentFrame++;
             setTimeout(animate, frameDuration);
         } else {
@@ -503,6 +567,25 @@ function explodeBlock(block, callback = null) {
 // ====================
 
 
+// Ask for a redraw without drawing right now. The main game loop already
+// draws every frame, so while it runs this does nothing. Otherwise (welcome,
+// countdown, or between loops) it schedules a single draw per frame no matter
+// how many callers ask. Never redraws over the pause screen.
+let drawRequested = false;
+function requestDraw() {
+    if (animationFrameId !== null || drawRequested || gamePaused) return;
+    drawRequested = true;
+    requestAnimationFrame(() => {
+        drawRequested = false;
+        if (!gamePaused) drawGame();
+    });
+} // requestDraw
+
+
+// Screen shake state, applied by drawGame so the shake is part of the normal frame
+let shake = null; // { endTime, intensity }
+
+
 // Draw the game
 function drawGame() {
 
@@ -510,6 +593,21 @@ function drawGame() {
     ctx.clearRect(0, 0, canvas.width, canvas.height);
     // Set the font right up front
     ctx.font = "24px Silkscreen";
+
+    // Apply screen shake, if active
+    let shaking = false;
+    if (shake) {
+        if (performance.now() < shake.endTime) {
+            shaking = true;
+            ctx.save();
+            ctx.translate(
+                (Math.random() - 0.5) * shake.intensity * 2,
+                (Math.random() - 0.5) * shake.intensity * 2
+            );
+        } else {
+            shake = null;
+        }
+    }
 
     // Run the corresponding function to draw the appropriate part of the game
     if (!gameRunning && countdown === null) {
@@ -520,6 +618,11 @@ function drawGame() {
         drawScoreboardScreen();
     } else {
         drawGameScreen();
+    }
+
+    if (shaking) {
+        ctx.restore();
+        requestDraw(); // Keep frames coming if the main loop isn't running
     }
 } // drawGame
 
@@ -595,6 +698,32 @@ function drawCountdownScreen() {
 } // drawCountdownScreen
 
 
+// The scorebar has a blurred drop shadow, which is expensive to draw every
+// frame. Render it once into an offscreen canvas and reuse that.
+const SCOREBAR_SHADOW_PAD = 50;
+let scorebarImage = null;
+function getScorebarImage() {
+    if (scorebarImage) return scorebarImage;
+
+    const off = document.createElement("canvas");
+    off.width = 300 + SCOREBAR_SHADOW_PAD * 2;
+    off.height = 42 + SCOREBAR_SHADOW_PAD * 2;
+    const offCtx = off.getContext("2d");
+    offCtx.shadowColor = "rgba(0, 0, 0, 0.5)";
+    offCtx.shadowOffsetX = 10;
+    offCtx.shadowOffsetY = 10;
+    offCtx.shadowBlur = 20;
+    offCtx.drawImage(
+        spriteSheet,
+        scoreBar.x, scoreBar.y, scoreBar.width, scoreBar.height,
+        SCOREBAR_SHADOW_PAD, SCOREBAR_SHADOW_PAD, 300, 42
+    );
+
+    scorebarImage = off;
+    return off;
+} // getScorebarImage
+
+
 // Draw the main Game Screen
 function drawGameScreen() {
 
@@ -610,7 +739,8 @@ function drawGameScreen() {
     // Draw all settled blocks
     blocks.forEach(block => {
         // Skip blocks currently exploding
-        const isExploding = explodingBlocks.some(e => e.x === block.x && e.y === block.y);
+        const isExploding = explodingBlocks.length > 0 &&
+            explodingBlocks.some(e => e.x === block.x && e.y === block.y);
         if (isExploding) return;
 
         // Use spriteOverride if present (e.g., for explosions)
@@ -632,25 +762,26 @@ function drawGameScreen() {
     }); // Draw settled blocks
 
 
+    // Work out where the active block would land once, for the ghost and the laser
+    const ghostPos = activeBlock ? getGhostPosition() : null;
+
     // Draw the ghost block, if enabled
-    if (activeBlock && showGhostBlock) {
-        const ghostPos = getGhostPosition();
-        if (ghostPos) {
-            ctx.lineWidth = 3;
-            ctx.fillStyle = "rgba(173, 216, 230, 0.1)";
-            ctx.strokeStyle = "rgba(241, 109, 1, 0.25)";
-            ctx.shadowColor = "rgba(241, 109, 1, 0.5)";
-            ctx.shadowBlur = 16;
-            ctx.fillRect(ghostPos.x, ghostPos.y, BLOCK_WIDTH, BLOCK_HEIGHT);
-            ctx.strokeRect(ghostPos.x, ghostPos.y, BLOCK_WIDTH, BLOCK_HEIGHT);
-            ctx.shadowBlur = 0;
-        }
+    if (ghostPos && showGhostBlock) {
+        // Fake the glow with a wider, fainter outline. shadowBlur is very
+        // slow on mobile GPUs when drawn every frame.
+        ctx.lineWidth = 9;
+        ctx.strokeStyle = "rgba(241, 109, 1, 0.1)";
+        ctx.strokeRect(ghostPos.x, ghostPos.y, BLOCK_WIDTH, BLOCK_HEIGHT);
+        ctx.lineWidth = 3;
+        ctx.fillStyle = "rgba(173, 216, 230, 0.1)";
+        ctx.strokeStyle = "rgba(241, 109, 1, 0.25)";
+        ctx.fillRect(ghostPos.x, ghostPos.y, BLOCK_WIDTH, BLOCK_HEIGHT);
+        ctx.strokeRect(ghostPos.x, ghostPos.y, BLOCK_WIDTH, BLOCK_HEIGHT);
     }
 
     
     // Draw laser beam, if active
-    if (activeLaser) {
-        const ghostPos = getGhostPosition();
+    if (activeLaser && ghostPos) {
         // Include block height to have the laser cover the ghost space
         drawLaserBeam(activeBlock.x, activeBlock.y + BLOCK_HEIGHT, ghostPos.y + BLOCK_HEIGHT);
     }
@@ -658,7 +789,6 @@ function drawGameScreen() {
 
     // Draw exploding block animations
     explodingBlocks.forEach(explosion => {
-        if (sfxOn) bombSound.play();
         const sprite = boomSprites[explosion.frame];
         if (sprite) {
             ctx.drawImage(
@@ -682,17 +812,14 @@ function drawGameScreen() {
 
 
         // Draw block glow outlines
+        // Glow is faked with a larger, fainter rect under the main one
+        // (shadowBlur is too slow to run every frame on mobile)
         blocks.forEach(({ x, y }) => {
-            ctx.shadowColor = "rgba(255, 255, 0, 1)";
-            ctx.shadowBlur = 30;
-            ctx.strokeStyle = "rgba(241, 109, 1, 0.5)";
+            ctx.fillStyle = "rgba(255, 255, 0, 0.12)";
+            ctx.fillRect(x - 6, y - 6, BLOCK_WIDTH + 12, BLOCK_HEIGHT + 12);
             ctx.fillStyle = "rgba(255, 255, 0, 0.25)";
-            ctx.lineWidth = 4;
-            //ctx.strokeRect(x + 2, y + 2, BLOCK_WIDTH - 4, BLOCK_HEIGHT - 4);
             ctx.fillRect(x + 2, y + 2, BLOCK_WIDTH - 4, BLOCK_HEIGHT - 4);
         });
-
-        ctx.shadowBlur = 0;
 
         const halfWidth = BLOCK_WIDTH / 2;
 
@@ -743,7 +870,8 @@ function drawGameScreen() {
 
     // Draw floating score popups
     if (showScorePopups) {
-        scorePopups.forEach((popup, index) => {
+        for (let index = scorePopups.length - 1; index >= 0; index--) {
+            const popup = scorePopups[index];
             ctx.globalAlpha = popup.alpha;
             ctx.fillStyle = "#ffffff";
             ctx.font = "30px Silkscreen";
@@ -760,7 +888,7 @@ function drawGameScreen() {
             if (popup.alpha <= 0) {
                 scorePopups.splice(index, 1);
             }
-        });
+        }
 
         ctx.globalAlpha = 1.0; // Reset transparency
 
@@ -783,15 +911,8 @@ function drawGameScreen() {
 
     // Draw the Scorebar
     if (drawScorebar) {
-        dropShadow(true);
-        ctx.drawImage(
-            spriteSheet,
-            scoreBar.x, scoreBar.y,
-            scoreBar.width, scoreBar.height,
-            50, 10,
-            300, 42
-        );
-        dropShadow(false);
+        const cached = getScorebarImage();
+        ctx.drawImage(cached, 50 - SCOREBAR_SHADOW_PAD, 10 - SCOREBAR_SHADOW_PAD);
 
         ctx.fillStyle = "white";
         ctx.font = "24px Silkscreen";
@@ -843,8 +964,6 @@ function drawPauseScreen() {
 
 // Draw the Scoreboard screen
 function drawScoreboardScreen() {
-    if (sfxOn) gameOverSound.play();
-
     // Clean slate
     ctx.fillStyle = "rgba(0, 0, 0, 0.5)";
     ctx.fillRect(0, 0, canvas.width, canvas.height);
@@ -1020,7 +1139,7 @@ function animateZap(centerBlockX, rowY, affectedBlocks, callback = null) {
             lightningOverlay = null;
         }
 
-        drawGame(); // Will show or hide based on lightningOverlay
+        requestDraw(); // Will show or hide based on lightningOverlay
 
         flickerIndex++;
         visible = !visible; // Toggle on next cycle
@@ -1150,8 +1269,7 @@ function removeBlock(block, callback = null) {
     if (index !== -1) {
         blocks.splice(index, 1);
 
-        // Optional: play an animation here later before removing visually
-        animateBlockRemoval();
+        requestDraw();
 
         // Apply gravity after a short delay to allow other things to finish
         setTimeout(() => {
@@ -1237,35 +1355,15 @@ function applyGravity(callback = null) {
 
 // Shake the screen!
 function shakeScreen(duration = 300, intensity = 5) {
-    const startTime = performance.now();
-
-    function doShake(currentTime) {
-        const elapsed = currentTime - startTime;
-
-        if (elapsed < duration) {
-            const dx = (Math.random() - 0.5) * intensity * 2;
-            const dy = (Math.random() - 0.5) * intensity * 2;
-
-            ctx.save();
-            ctx.translate(dx, dy);
-            drawGame(); // redraw everything with offset
-            ctx.restore();
-
-            requestAnimationFrame(doShake);
-        } else {
-            // Final redraw to reset back to normal
-            drawGame();
-        }
-    }
-
-    requestAnimationFrame(doShake);
+    shake = { endTime: performance.now() + duration, intensity };
+    requestDraw();
 } // shakeScreen
 
 
 // Fire the blaster Block instead of dropping it
 function fireBlaster(x, y) {
 
-    if (sfxOn) laserSound.play();
+    sfx.play(laserSound);
 
     // Find the bottom of the laser path
     const columnBlocks = blocks
@@ -1383,7 +1481,7 @@ function doBug(block, callback) {
     // Special behavior if the block below is a Wild
     if (blockBelow?.type === "Wild") {
         
-        wildSound.play();
+        sfx.play(wildSound);
         
         // Remove both blocks (Bug and Wild)
         removeBlock(blockBelow);
@@ -1393,7 +1491,7 @@ function doBug(block, callback) {
     }
 
     // Only play the bug sound if we DON'T land on a Wild
-    bugSound.play();
+    sfx.play(bugSound);
 
     return callback?.();
 
@@ -1409,7 +1507,7 @@ function doWild(block, callback) {
     if (blockBelowType?.type === "Bug") {
         // Remove both blocks (Wild and Bug)
         removeBlock(blockBelow);
-        wildSound.play();
+        sfx.play(wildSound);
         removeBlock(block);
         return callback?.();
     }
@@ -1433,7 +1531,7 @@ function doSwap(block, callback) {
 
     // If there aren't 2 blocks to swap
     if (!blockBelow || !blockTwoBelow) {
-        failSound.play();
+        sfx.play(failSound);
         return callback?.();
     }
 
@@ -1444,7 +1542,7 @@ function doSwap(block, callback) {
     const bottomBlock = blockTwoBelow;
 
     // Play sound effect
-    swapSound.play();
+    sfx.play(swapSound);
 
     // Run the animated swap (with merge after)
     animateSwap(block, topBlock, bottomBlock, () => {
@@ -1472,7 +1570,7 @@ function doBomb(block, callback) {
         const removedBlock = blocks[blockBelowIndex];
 
         blocks.splice(blockBelowIndex, 1); // Actually remove the block
-        if (sfxOn) bombSound.play();
+        sfx.play(bombSound);
 
         // Animate the explosion
         explodeBlock(removedBlock);
@@ -1485,7 +1583,7 @@ function doBomb(block, callback) {
         }
 
     } else {
-        if (sfxOn) failSound.play();
+        sfx.play(failSound);
         console.log("Nothing to bomb");
     }
 
@@ -1534,13 +1632,13 @@ function doMagnet(block, callback) {
         .sort((a, b) => a.y - b.y); // Top to bottom
 
     if (colBlocks.length <= 1) {
-        if (sfxOn) failSound.play();
+        sfx.play(failSound);
         removeBlock(block); // Nothing to do
         return callback?.();
     }
 
     // Play the magnet sound only if there are blocks to scramble
-    if (sfxOn) magnetSound.play();
+    sfx.play(magnetSound);
 
     // Create a shuffled version of the current spriteIndexes
     const originalIndexes = colBlocks.map(b => b.spriteIndex);
@@ -1603,12 +1701,12 @@ function doZap(block, callback = null) {
 
     // If no block is landed on
     if (!blockBelow) {
-        if (sfxOn) failSound.play();
+        sfx.play(failSound);
         removeBlock(block);
         return callback?.();
     }
 
-    if (sfxOn) zapSound.play();
+    sfx.play(zapSound);
     shakeScreen(300, 4);
 
     // Start with the block directly below
@@ -1670,11 +1768,11 @@ function doNuke(block, callback) {
     let completed = 0;
 
     if (columnBlocks.length === 0) {
-        if (sfxOn) failSound.play();
+        sfx.play(failSound);
         return callback?.();
     }
 
-    if (sfxOn) nukeSound.play();
+    sfx.play(nukeSound);
     shakeScreen(500, 8);
 
     columnBlocks.forEach((targetBlock, index) => {
@@ -1730,7 +1828,7 @@ function mergeBlocks(block, callback = null) {
             if (blockBelowType?.type === "Bug") {
                 // Remove both blocks (Wild + Bug)
                 removeBlock(blockBelow);
-                wildSound.play();
+                sfx.play(wildSound);
                 removeBlock(block);
                 return callback?.();
             }
@@ -1777,7 +1875,7 @@ function mergeBlocks(block, callback = null) {
                 score += upgradedValue;
                 spawnScorePopup(block.x + BLOCK_WIDTH / 2, block.y, upgradedValue);
 
-                if (sfxOn) mergeSound.play();
+                sfx.play(mergeSound);
                 console.log("Merge:", blockTypes[block.spriteIndex].type);
 
                 return setTimeout(() => {
@@ -1788,8 +1886,8 @@ function mergeBlocks(block, callback = null) {
                 // Special handling for max merge of 256 blocks
                 // This needs more fanfare
 
-                if (sfxOn) mergeSound.play(); 
-                if (sfxOn) successSound.play(); // We've made a byte!
+                sfx.play(mergeSound); 
+                sfx.play(successSound); // We've made a byte!
 
                 score += upgradedValue; // Still give points!
                 spawnScorePopup(block.x + BLOCK_WIDTH / 2, block.y, upgradedValue);
@@ -1863,7 +1961,7 @@ function endGame() {
     stopMusic();
 
     // Game over sound effect
-    if (sfxOn) gameOverSound.play();
+    sfx.play(gameOverSound);
 
     // Draw the scoreboard
     drawScoreboardScreen();
@@ -1918,7 +2016,7 @@ function moveBlockLeft() {
 
     if (newX >= 0 && !collision) {
         activeBlock.x = newX;
-        if (sfxOn) leftSound.play();
+        sfx.play(leftSound);
     }
 } // moveBlockLeft
 
@@ -1936,7 +2034,7 @@ function moveBlockRight() {
 
     if (newX < canvas.width && !collision) {
         activeBlock.x = newX;
-        if (sfxOn) rightSound.play();
+        sfx.play(rightSound);
     }
 } // moveBlockRight()
 
@@ -1957,7 +2055,7 @@ function dropBlock() {
     let columnBlocks = blocks.filter(b => b.x === activeBlock.x).sort((a, b) => a.y - b.y);
 
     // Play the drop sound effect
-    if (sfxOn) dropSound.play();
+    sfx.play(dropSound);
 
     for (let b of columnBlocks) {
         if (b.y > activeBlock.y) {
@@ -1994,7 +2092,7 @@ function dropBlock() {
 
             activeBlock = null;
 
-            if (sfxOn) placeSound.play();
+            sfx.play(placeSound);
 
             setTimeout(() => {
                 mergeBlocks(placedBlock, () => {
@@ -2095,7 +2193,7 @@ function togglePause() {
         if (!gamePaused) {  // Pausing the game
             gamePaused = true;
             backgroundMusic.pause();
-            if (sfxOn) pauseSound.play();
+            sfx.play(pauseSound);
             console.log("Game paused");
             drawPauseScreen();
         } else {  // Unpausing the game
@@ -2151,8 +2249,26 @@ function logDebug(message) {
 // ====================
 
 
+// Convert a mouse/pointer event to canvas coordinates. The canvas is scaled
+// with CSS on small screens, so client pixels must be scaled back to the
+// 400x720 drawing space.
+function toCanvasPoint(event) {
+    const rect = canvas.getBoundingClientRect();
+    return {
+        x: (event.clientX - rect.left) * (canvas.width / rect.width),
+        y: (event.clientY - rect.top) * (canvas.height / rect.height)
+    };
+} // toCanvasPoint
+
+// When the last touch happened, so the browser's follow-up "click" can be ignored
+let lastTouchTime = -Infinity;
+
+
 // General click action
 canvas.addEventListener("click", function(event) {
+    // Touches are handled by the TouchController; ignore the synthetic click
+    if (performance.now() - lastTouchTime < 800) return;
+
     if (gameOver) {
         gameOver = false; // Ensure game over state resets
         resetGame();
@@ -2166,9 +2282,7 @@ canvas.addEventListener("click", function(event) {
         return;
     }
     
-    const rect = canvas.getBoundingClientRect();
-    const mouseX = event.clientX - rect.left;
-    const mouseY = event.clientY - rect.top;
+    const { x: mouseX, y: mouseY } = toCanvasPoint(event);
     
     // Play button clicked
     if (!gameRunning && mouseX >= 50 && mouseX <= 350 && mouseY >= 450 && mouseY <= 570) {
@@ -2176,7 +2290,7 @@ canvas.addEventListener("click", function(event) {
         welcomeMusic.currentTime = 0; // Reset to the beginning
         
         resetGame();
-        if (sfxOn) dropSound.play();
+        sfx.play(dropSound);
 
     } else {
         dropBlock();
@@ -2188,9 +2302,7 @@ canvas.addEventListener("click", function(event) {
 canvas.addEventListener("mousemove", function(event) {
     if (gamePaused) return; // Prevents the pause screen from being canceled
 
-    const rect = canvas.getBoundingClientRect();
-    const mouseX = event.clientX - rect.left;
-    const mouseY = event.clientY - rect.top;
+    const { x: mouseX, y: mouseY } = toCanvasPoint(event);
 
     // Track previous hover state to prevent unnecessary redraws
     let previousHoverState = isHoveringPlayButton;
@@ -2208,8 +2320,7 @@ canvas.addEventListener("mousemove", function(event) {
 // Mouse listener for horizontal block movement
 canvas.addEventListener("mousemove", function(event) {
     if (activeBlock && gameRunning && !gamePaused) {
-        const rect = canvas.getBoundingClientRect();
-        const mouseX = event.clientX - rect.left;
+        const mouseX = toCanvasPoint(event).x;
         let newBlockX = Math.floor(mouseX / BLOCK_WIDTH) * BLOCK_WIDTH;
 
         if (newBlockX !== activeBlock.x) {
@@ -2368,99 +2479,146 @@ document.addEventListener("keydown", function(event) {
 // TOUCH CONTROLS
 // ====================
 
+const TOUCH_LOCK_DISTANCE = 12;  // Canvas pixels a finger must move before it counts as a drag/swipe
+const TOUCH_SWIPE_DISTANCE = 60; // Canvas pixels of vertical travel to trigger drop / pause
 
-let touchStartY = 0;
-let touchEndY = 0;
-let touchStartX = 0;
-let touchEndX = 0;
-let isSwipeDown = false;
-let isSwipeUp = false;
+// Handles touch and pen input with Pointer Events.
+//   Drag horizontally  → the block follows your finger, column by column
+//   Swipe down         → drop the block (fire the blaster)
+//   Swipe up           → pause
+//   Tap                → nudge left/right by half of the screen, or start/resume
+// Swipes fire as soon as the distance is reached, not when the finger lifts.
+class TouchController {
+    constructor(target) {
+        this.target = target;
+        this.reset();
 
-// touchstart event listener
-canvas.addEventListener('touchstart', (event) => {
-    event.preventDefault();  // Prevent default to avoid unwanted behavior (like scrolling)
+        target.addEventListener("pointerdown", e => this.onDown(e));
+        target.addEventListener("pointermove", e => this.onMove(e));
+        target.addEventListener("pointerup", e => this.onUp(e));
+        target.addEventListener("pointercancel", () => this.reset());
+    } // constructor
 
-    // Store the initial touch position (start)
-    touchStartX = event.touches[0].clientX;
-    touchStartY = event.touches[0].clientY;
+    reset() {
+        this.pointerId = null; // Only one finger is tracked at a time
+        this.axis = null;      // "x" or "y" once the gesture direction is known
+        this.fired = false;    // A one-shot swipe has already been triggered
+        this.startX = 0;
+        this.startY = 0;
+        this.startColumn = 0;
+    } // reset
 
-    // Reset swipe flag on each touchstart
-    isSwipeDown = false;
-    isSwipeUp = false;
-});
+    onDown(event) {
+        if (event.pointerType === "mouse") return; // Mouse has its own handlers
+        event.preventDefault();
+        lastTouchTime = performance.now();
 
-// touchmove event listener
-canvas.addEventListener('touchmove', (event) => {
-    event.preventDefault();  // Prevent default to avoid unwanted behavior during touch move
+        if (this.pointerId !== null) return; // Ignore extra fingers
 
-    // Store the current touch position
-    touchEndX = event.touches[0].clientX;
-    touchEndY = event.touches[0].clientY;
+        this.reset();
+        this.pointerId = event.pointerId;
+        this.target.setPointerCapture?.(event.pointerId);
 
-    // Check if it's a vertical movement greater than horizontal (this is the swipe gesture)
-    const deltaX = Math.abs(touchEndX - touchStartX);
-    const deltaY = Math.abs(touchEndY - touchStartY);
+        const point = toCanvasPoint(event);
+        this.startX = point.x;
+        this.startY = point.y;
+        this.startColumn = activeBlock ? activeBlock.x / BLOCK_WIDTH : 0;
+    } // onDown
 
-    // If the vertical movement is larger than the horizontal and exceeds a small threshold, it's a swipe
-    if (deltaY > deltaX && deltaY > 10) {
-        if (touchEndY > touchStartY) {
-            isSwipeDown = true;  // Mark it as a swipe down gesture
-        } else {
-            isSwipeUp = true;    // Mark it as a swipe up gesture
+    onMove(event) {
+        if (event.pointerId !== this.pointerId) return;
+        event.preventDefault();
+        lastTouchTime = performance.now();
+
+        const point = toCanvasPoint(event);
+        const dx = point.x - this.startX;
+        const dy = point.y - this.startY;
+
+        // Decide whether this is a horizontal drag or a vertical swipe
+        if (this.axis === null) {
+            if (Math.hypot(dx, dy) < TOUCH_LOCK_DISTANCE) return;
+            this.axis = Math.abs(dx) > Math.abs(dy) ? "x" : "y";
         }
-    }
-});
 
-// touchend event listener
-canvas.addEventListener('touchend', (event) => {
-    event.preventDefault();  // Prevent default behavior for touchend
+        if (!gameRunning || gamePaused || gameOver) return;
 
-    // If swipe-down gesture detected, trigger block drop
-    if (gameRunning && isSwipeDown && touchEndY - touchStartY > 30) {  // Minimum vertical swipe distance for drop
-        dropBlock();  // Trigger block drop action
-    }
+        if (this.axis === "x") {
+            this.dragBlockTo(dx);
+        } else if (!this.fired) {
+            if (dy > TOUCH_SWIPE_DISTANCE) {
+                this.fired = true;
+                dropBlock();
+            } else if (dy < -TOUCH_SWIPE_DISTANCE) {
+                this.fired = true;
+                togglePause();
+            }
+        }
+    } // onMove
 
-    // Detect swipe-up gesture to trigger action
-    if (!gamePaused && isSwipeUp && touchStartY - touchEndY > 30) {  // Minimum vertical swipe distance for swipe up
-        togglePause();
-    }
+    onUp(event) {
+        if (event.pointerId !== this.pointerId) return;
+        event.preventDefault();
+        lastTouchTime = performance.now();
 
-    // Handle taps for game actions
-    if (!isSwipeDown && !isSwipeUp) {
+        const wasTap = this.axis === null;
+        const x = toCanvasPoint(event).x;
+        this.reset();
+
+        if (wasTap) this.onTap(x);
+    } // onUp
+
+    // Step the active block toward the column under the finger
+    dragBlockTo(dx) {
+        if (!activeBlock || dropInProgress) return;
+
+        const lastColumn = canvas.width / BLOCK_WIDTH - 1;
+        const target = Math.max(0, Math.min(lastColumn,
+            this.startColumn + Math.round(dx / BLOCK_WIDTH)));
+
+        for (let guard = 0; guard <= lastColumn && activeBlock; guard++) {
+            const before = activeBlock.x;
+            const column = before / BLOCK_WIDTH;
+            if (column === target) break;
+
+            if (column < target) moveBlockRight(); else moveBlockLeft();
+            if (activeBlock && activeBlock.x === before) break; // Blocked
+        }
+    } // dragBlockTo
+
+    onTap(x) {
         // Tap on Scoreboard screen to return to Welcome screen
         if (gameOver) {
             gameOver = false;
-            drawWelcomeScreen(); // Draw the welcome screen
+            drawWelcomeScreen();
             return;
         }
-        
-        // Tap on Welcome screen to start the game
+
+        // Tap on Welcome screen to start the game (not during the countdown)
         if (!gameRunning) {
-            resetGame();  // Start the game
+            if (countdown === null) resetGame();
             return;
         }
 
-        // Pause/Unpause Game (if on Pause screen)
+        // Tap on the Pause screen to resume
         if (gamePaused) {
-            togglePause(); // Pauses/unpauses the game
+            togglePause();
             return;
         }
 
-        // Move Left (if touch is on the left half of the screen)
-        if (gameRunning && !gamePaused && touchEndX < canvas.width / 2) {
-            moveBlockLeft(); // Move block left
-        }
+        if (x < canvas.width / 2) moveBlockLeft(); else moveBlockRight();
+    } // onTap
+} // class TouchController
 
-        // Move Right (if touch is on the right half of the screen)
-        if (gameRunning && !gamePaused && touchEndX > canvas.width / 2) {
-            moveBlockRight(); // Move block right
-        }
-    }
-});
+const touchController = new TouchController(canvas);
 
-// Stop music when you minimize browser on mobile
-window.addEventListener('blur', function() {
-    togglePause();
+// Pause (never resume) when the player switches away from the game
+function pauseIfPlaying() {
+    if (gameRunning && !gamePaused && !gameOver) togglePause();
+} // pauseIfPlaying
+
+window.addEventListener("blur", pauseIfPlaying);
+document.addEventListener("visibilitychange", () => {
+    if (document.hidden) pauseIfPlaying();
 });
 
 // ====================

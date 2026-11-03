@@ -39,6 +39,10 @@
 
         /* Ensure canvas scales properly */
         canvas {
+            touch-action: none; /* We handle all touch gestures ourselves */
+            -webkit-user-select: none;
+            user-select: none;
+            -webkit-touch-callout: none;
             border: 2px solid #f16d01;
             max-width: 100%;
             height: auto;

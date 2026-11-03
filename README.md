@@ -28,7 +28,17 @@ G			Toggle Ghost
 X  Q		End Game
 ```
 
-Mouse controls are available, but keyboard input is generally recommended for best gameplay. Though the game is not optimized for mobile, gesture controls work too.
+Mouse controls are available, but keyboard input is generally recommended for best gameplay.
+
+Touch controls:
+
+```
+Drag left/right		Move the block (it follows your finger)
+Swipe down			Drop the block / fire the Blaster
+Swipe up			Pause
+Tap					Nudge left or right, start, or resume
+♪ ♫ icons			Tap to toggle music / sound FX
+```
 
 ## Specials
 
@@ -159,6 +169,30 @@ There is also a 10% chance of receiving a special block vs. a standard numeric b
 	•	￼Make native iPhone port
 
 
+## Code Structure
+
+The game is plain JavaScript (no build step, no modules, so `index.html` opens straight from disk). The scripts load in this order:
+
+```
+js/Config.js        Constants and sprite sheet rectangles
+js/Block.js         A block: position + type
+js/BlockTypes.js    One class per kind of block (numbers and each special), the
+                    block catalog, and the weighted spawner
+js/Board.js         The settled blocks and queries about them (pure data)
+js/Effects.js       Popups, explosions, laser, lightning, screen shake
+js/AudioManager.js  Sound effects (Web Audio) and the music playlist
+js/Hud.js           Score strip and the music / sound FX buttons
+js/Renderer.js      All canvas drawing; reads game state, never changes it
+js/Game.js          The rules: state machine, scoring, timers, merging, gravity
+js/Input.js         Keyboard, mouse, and touch controllers → Game commands
+js/main.js          Wires it together
+```
+
+`Game` never touches the page: drawing goes through `Renderer`, sound through `AudioManager`, and input arrives as plain calls like `game.moveLeft()` and `game.drop()`. Each special block's behavior lives in its own `BlockType` class (`land()` for what happens when it settles).
+
+The original single-file version, exactly as first written, is preserved in `archive/original-v0.02.2/` and tagged `original-v0.02.2`.
+
+
 ## About
 
 I am not a programmer! I’m an animator and designer by day and did this just for fun as a learning exercise. BitCrunch is an idea I’ve had in my head for a long time and the graphics in the game are from a sprite sheet I made many years ago. I finally decided to go ahead and try to implement a basic version of the working game as a fun challenge just to see if I could.
@@ -167,7 +201,7 @@ Since I’m a hobbyist rather than an actual software developer, every feature a
 
 This initial version was written purely in plain JavaScript canvas without any frameworks. You can view the code here:
 
-**[pizar.net/BitCrunch/BitCrunch.js](https://pizar.net/BitCrunch/BitCrunch.js)**
+**`archive/original-v0.02.2/BitCrunch.js`** (the code has since been reorganized into the `js/` folder, see [Code Structure](#code-structure))
 
 I tried to keep it as neat and organized as possible, but there are definitely places where I used  inconsistent methods for various parts of the game as I learned new techniques or the logic became more complicated as I added features.
 

@@ -179,9 +179,21 @@
     <div id="debugLog" style="position: fixed; bottom: 10px; left: 10px; background: rgba(0,0,0,0.7); color: #fff; padding: 10px; font-size: 12px; z-index: 1000; max-height: 100px; overflow: auto;"></div>
 
 
-    <script src="BitCrunch.js"></script>
+    <script src="js/Config.js"></script>
+    <script src="js/Block.js"></script>
+    <script src="js/BlockTypes.js"></script>
+    <script src="js/Board.js"></script>
+    <script src="js/Effects.js"></script>
+    <script src="js/AudioManager.js"></script>
+    <script src="js/Hud.js"></script>
+    <script src="js/Renderer.js"></script>
+    <script src="js/Game.js"></script>
+    <script src="js/Input.js"></script>
+    <script src="js/main.js"></script>
 
     <script>
+
+        const canvas = document.getElementById("gameCanvas");
 
         function adjustCanvasSize() {
             let isMobile = window.innerWidth < 768;

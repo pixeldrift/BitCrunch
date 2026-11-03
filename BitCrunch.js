@@ -57,8 +57,14 @@ canvas.oncontextmenu = function () { return false;};
 const ctx = canvas.getContext("2d");
 
 // Set canvas dimensions (optional, since CSS also controls it)
-canvas.width = 400;
-canvas.height = 720;
+// The canvas is a HUD strip on top of the playing grid, so nothing in the HUD
+// covers blocks. Game logic works in grid coordinates (0,0 = top-left of the
+// grid); the renderer shifts the grid down by HUD_HEIGHT.
+const GRID_WIDTH = 400;
+const GRID_HEIGHT = 720;
+const HUD_HEIGHT = 70;
+canvas.width = GRID_WIDTH;
+canvas.height = GRID_HEIGHT + HUD_HEIGHT;
 
 
 // Game variables
@@ -429,7 +435,7 @@ function updateBlocks() {
     let nextY = activeBlock.y + gravity;
 
     // Check if the active block can fall further
-    if (nextY + BLOCK_HEIGHT > canvas.height || checkCollision(activeBlock)) {
+    if (nextY + BLOCK_HEIGHT > GRID_HEIGHT || checkCollision(activeBlock)) {
         if (!activeBlock) return;
 
         // The block has landed, finalize its position
@@ -609,6 +615,10 @@ function drawGame() {
         }
     }
 
+    // Everything except the HUD is drawn in grid space, below the HUD strip
+    ctx.save();
+    ctx.translate(0, HUD_HEIGHT);
+
     // Run the corresponding function to draw the appropriate part of the game
     if (!gameRunning && countdown === null) {
         drawWelcomeScreen();
@@ -620,10 +630,14 @@ function drawGame() {
         drawGameScreen();
     }
 
+    ctx.restore(); // Back out of grid space
+
     if (shaking) {
         ctx.restore();
         requestDraw(); // Keep frames coming if the main loop isn't running
     }
+
+    drawHud(); // The HUD never shakes
 } // drawGame
 
 
@@ -631,14 +645,14 @@ function drawGame() {
 function drawWelcomeScreen() {
     // Background overlay
     ctx.fillStyle = "rgba(0, 0, 0, 0.5)";
-    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    ctx.fillRect(0, 0, canvas.width, GRID_HEIGHT);
 
     // Background grid
     ctx.drawImage(
         spriteSheet,
         gameGrid.x, gameGrid.y,
         gameGrid.width, gameGrid.height,
-        0, 0, canvas.width, canvas.height
+        0, 0, canvas.width, GRID_HEIGHT
     );
 
     dropShadow(true);
@@ -678,7 +692,7 @@ function drawCountdownScreen() {
         spriteSheet,
         gameGrid.x, gameGrid.y,
         gameGrid.width, gameGrid.height,
-        0, 0, canvas.width, canvas.height
+        0, 0, canvas.width, GRID_HEIGHT
     );
 
     // Countdown text
@@ -696,6 +710,65 @@ function drawCountdownScreen() {
     dropShadow(false);
     
 } // drawCountdownScreen
+
+
+// ====================
+// HUD
+// ====================
+
+const HUD_BUTTONS = {
+    music: { x: 0, y: 0, width: 50, height: HUD_HEIGHT },
+    sfx: { x: GRID_WIDTH - 50, y: 0, width: 50, height: HUD_HEIGHT }
+};
+const HUD_SCOREBAR_Y = 14;
+
+// Which HUD button (if any) is under a canvas point?
+function hudButtonAt(x, y) {
+    for (const [name, r] of Object.entries(HUD_BUTTONS)) {
+        if (x >= r.x && x < r.x + r.width && y >= r.y && y < r.y + r.height) return name;
+    }
+    return null;
+} // hudButtonAt
+
+
+// Trigger a HUD button
+function activateHudButton(name) {
+    if (name === "music") toggleMusic();
+    else if (name === "sfx") toggleSfx();
+} // activateHudButton
+
+
+// Draw the HUD strip above the grid: music toggle, score, sound effects toggle
+function drawHud() {
+    ctx.clearRect(0, 0, canvas.width, HUD_HEIGHT);
+
+    ctx.fillStyle = "#222";
+    ctx.fillRect(0, 0, canvas.width, HUD_HEIGHT);
+    ctx.fillStyle = "#f16d01";
+    ctx.fillRect(0, HUD_HEIGHT - 2, canvas.width, 2);
+
+    if (drawScorebar) {
+        ctx.drawImage(
+            getScorebarImage(),
+            50 - SCOREBAR_SHADOW_PAD, HUD_SCOREBAR_Y - SCOREBAR_SHADOW_PAD
+        );
+
+        ctx.fillStyle = "white";
+        ctx.font = "24px Silkscreen";
+        ctx.textAlign = "right";
+        ctx.fillText(score, 308, HUD_SCOREBAR_Y + 28);
+    }
+
+    // Toggle icons stay visible but dim when off, so they can be turned back on
+    ctx.font = "24px Silkscreen";
+    ctx.textAlign = "center";
+    ctx.fillStyle = "white";
+    ctx.globalAlpha = musicOn ? 1 : 0.3;
+    ctx.fillText("\u266A", HUD_BUTTONS.music.x + HUD_BUTTONS.music.width / 2, HUD_SCOREBAR_Y + 28);
+    ctx.globalAlpha = sfxOn ? 1 : 0.3;
+    ctx.fillText("\u266B", HUD_BUTTONS.sfx.x + HUD_BUTTONS.sfx.width / 2, HUD_SCOREBAR_Y + 28);
+    ctx.globalAlpha = 1;
+} // drawHud
 
 
 // The scorebar has a blurred drop shadow, which is expensive to draw every
@@ -732,7 +805,7 @@ function drawGameScreen() {
         spriteSheet,
         gameGrid.x, gameGrid.y,
         gameGrid.width, gameGrid.height,
-        0, 0, canvas.width, canvas.height
+        0, 0, canvas.width, GRID_HEIGHT
     );
     
 
@@ -909,24 +982,7 @@ function drawGameScreen() {
     } // Row numbbrs
 
 
-    // Draw the Scorebar
-    if (drawScorebar) {
-        const cached = getScorebarImage();
-        ctx.drawImage(cached, 50 - SCOREBAR_SHADOW_PAD, 10 - SCOREBAR_SHADOW_PAD);
 
-        ctx.fillStyle = "white";
-        ctx.font = "24px Silkscreen";
-        ctx.textAlign = "right";
-        ctx.fillText(score, 308, 38);
-
-        ctx.textAlign = "left";
-        if (musicOn) {
-            ctx.fillText("♪", 10, 38);
-        }
-        if (sfxOn) {
-            ctx.fillText("\u266B", 358, 38);
-        }
-    } // Scorebar
 
 
     // Draw the debugging text under the scorebar
@@ -966,7 +1022,7 @@ function drawPauseScreen() {
 function drawScoreboardScreen() {
     // Clean slate
     ctx.fillStyle = "rgba(0, 0, 0, 0.5)";
-    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    ctx.fillRect(0, 0, canvas.width, GRID_HEIGHT);
 
     // Background Grid
     ctx.drawImage(
@@ -974,7 +1030,7 @@ function drawScoreboardScreen() {
         gameGrid.x, gameGrid.y,
         gameGrid.width, gameGrid.height,
         0, 0,
-        canvas.width, canvas.height
+        canvas.width, GRID_HEIGHT
     );
 
     // Fill the ggame grid with the orange block
@@ -1192,10 +1248,20 @@ function animateBug(block, callback) {
 } // animateBug
 
 
+// Run a drawing function in grid space (below the HUD). For code that draws
+// outside of drawGame(), such as the timed fillGrid animation.
+function inGridSpace(drawFn) {
+    ctx.save();
+    ctx.translate(0, HUD_HEIGHT);
+    drawFn();
+    ctx.restore();
+} // inGridSpace
+
+
 // Sequentially fill the game grid with a specified block sprite
 function fillGrid(blockType, speed, callback = null) {
 
-    let yStart = canvas.height - BLOCK_HEIGHT;
+    let yStart = GRID_HEIGHT - BLOCK_HEIGHT;
     let xStart = 0;
     let gridFilling = true;
 
@@ -1204,7 +1270,7 @@ function fillGrid(blockType, speed, callback = null) {
 
         if (yStart < 0) {
             gridFilling = false;
-            if (callback) callback();
+            if (callback) inGridSpace(callback);
             return;
         }
 
@@ -1212,18 +1278,18 @@ function fillGrid(blockType, speed, callback = null) {
         if (!blockType || typeof blockType.x === "undefined") {
             console.warn("fillGrid received invalid blockType:", blockType);
             gridFilling = false;
-            if (callback) callback();
+            if (callback) inGridSpace(callback);
             return;
         }
 
         // Draw the block's sprite
-        ctx.drawImage(
+        inGridSpace(() => ctx.drawImage(
             spriteSheet,
             blockType.x, blockType.y,
             blockType.width, blockType.height,
             xStart, yStart,
             BLOCK_WIDTH, BLOCK_HEIGHT
-        );
+        ));
 
         xStart += BLOCK_WIDTH;
         if (xStart >= canvas.width) {
@@ -1285,7 +1351,7 @@ function checkCollision(block) {
     const nextY = block.y + gravity;
 
     // Bottom boundary check
-    if (nextY + BLOCK_HEIGHT > canvas.height) {
+    if (nextY + BLOCK_HEIGHT > GRID_HEIGHT) {
         return true;
     }
 
@@ -1320,7 +1386,7 @@ function applyGravity(callback = null) {
             let nextY = block.y + BLOCK_HEIGHT;
 
             while (
-                nextY < canvas.height &&
+                nextY < GRID_HEIGHT &&
                 !getBlockAt(colX, nextY)
             ) {
                 targetY = nextY;
@@ -1383,7 +1449,7 @@ function fireBlaster(x, y) {
     }
 
     // Store laser visuals so we can draw the beam
-    const laserBottom = targetBlock ? targetBlock.y : canvas.height;
+    const laserBottom = targetBlock ? targetBlock.y : GRID_HEIGHT;
 
     activeLaser = {
         x,
@@ -1915,7 +1981,7 @@ function getGhostPosition() {
     let ghostX = activeBlock.x;
     let ghostY = 0;
 
-    for (let y = 0; y <= canvas.height - BLOCK_HEIGHT; y += BLOCK_HEIGHT) {
+    for (let y = 0; y <= GRID_HEIGHT - BLOCK_HEIGHT; y += BLOCK_HEIGHT) {
         let occupied = blocks.some(b => b.x === ghostX && b.y === y);
         if (!occupied) {
             ghostY = y;
@@ -1963,8 +2029,9 @@ function endGame() {
     // Game over sound effect
     sfx.play(gameOverSound);
 
-    // Draw the scoreboard
-    drawScoreboardScreen();
+    // Draw the scoreboard (in grid space) and refresh the HUD
+    inGridSpace(drawScoreboardScreen);
+    drawHud();
 
     console.log("Game over!");
     console.log("Score:     " + score);
@@ -1988,7 +2055,8 @@ function toggleSfx() {
         console.log("SFX on");
     }
     sfxOn = !sfxOn;
-}
+    drawHud();
+} // toggleSfx
 
 function toggleMusic() {
 if (musicOn) {
@@ -1999,6 +2067,7 @@ if (musicOn) {
         console.log("Music on");
     }
     musicOn = !musicOn;
+    drawHud();
 } // toggleMusic
 
 
@@ -2051,7 +2120,7 @@ function dropBlock() {
     }
 
     dropInProgress = true; // Prevent side-to-side movement while dropping
-    let maxY = canvas.height - BLOCK_HEIGHT;
+    let maxY = GRID_HEIGHT - BLOCK_HEIGHT;
     let columnBlocks = blocks.filter(b => b.x === activeBlock.x).sort((a, b) => a.y - b.y);
 
     // Play the drop sound effect
@@ -2255,7 +2324,7 @@ function logDebug(message) {
 function toCanvasPoint(event) {
     const rect = canvas.getBoundingClientRect();
     return {
-        x: (event.clientX - rect.left) * (canvas.width / rect.width),
+        x: (event.clientX - rect.left) * (GRID_WIDTH / rect.width),
         y: (event.clientY - rect.top) * (canvas.height / rect.height)
     };
 } // toCanvasPoint
@@ -2268,6 +2337,13 @@ let lastTouchTime = -Infinity;
 canvas.addEventListener("click", function(event) {
     // Touches are handled by the TouchController; ignore the synthetic click
     if (performance.now() - lastTouchTime < 800) return;
+
+    // HUD buttons work in any game state
+    const hudButton = hudButtonAt(...Object.values(toCanvasPoint(event)));
+    if (hudButton) {
+        activateHudButton(hudButton);
+        return;
+    }
 
     if (gameOver) {
         gameOver = false; // Ensure game over state resets
@@ -2282,7 +2358,8 @@ canvas.addEventListener("click", function(event) {
         return;
     }
     
-    const { x: mouseX, y: mouseY } = toCanvasPoint(event);
+    const { x: mouseX, y: canvasY } = toCanvasPoint(event);
+    const mouseY = canvasY - HUD_HEIGHT; // Grid space
     
     // Play button clicked
     if (!gameRunning && mouseX >= 50 && mouseX <= 350 && mouseY >= 450 && mouseY <= 570) {
@@ -2302,7 +2379,8 @@ canvas.addEventListener("click", function(event) {
 canvas.addEventListener("mousemove", function(event) {
     if (gamePaused) return; // Prevents the pause screen from being canceled
 
-    const { x: mouseX, y: mouseY } = toCanvasPoint(event);
+    const { x: mouseX, y: canvasY } = toCanvasPoint(event);
+    const mouseY = canvasY - HUD_HEIGHT; // Grid space
 
     // Track previous hover state to prevent unnecessary redraws
     let previousHoverState = isHoveringPlayButton;
@@ -2373,7 +2451,7 @@ document.addEventListener("keydown", function(event) {
     // Any key on Scoreboard screen goes back to Welcome
     if (gameOver) {
         gameOver = false;
-        drawWelcomeScreen();
+        drawGame();
         return;
     }
 
@@ -2561,10 +2639,10 @@ class TouchController {
         lastTouchTime = performance.now();
 
         const wasTap = this.axis === null;
-        const x = toCanvasPoint(event).x;
+        const point = toCanvasPoint(event);
         this.reset();
 
-        if (wasTap) this.onTap(x);
+        if (wasTap) this.onTap(point);
     } // onUp
 
     // Step the active block toward the column under the finger
@@ -2585,11 +2663,18 @@ class TouchController {
         }
     } // dragBlockTo
 
-    onTap(x) {
+    onTap({ x, y }) {
+        // HUD buttons work in any game state
+        const hudButton = hudButtonAt(x, y);
+        if (hudButton) {
+            activateHudButton(hudButton);
+            return;
+        }
+
         // Tap on Scoreboard screen to return to Welcome screen
         if (gameOver) {
             gameOver = false;
-            drawWelcomeScreen();
+            drawGame();
             return;
         }
 
@@ -2627,14 +2712,17 @@ document.addEventListener("visibilitychange", () => {
 
 
 // Start the game loop, but only after the sprite sheets load
-spriteSheet.onload = () => {
-    logoSprite.onload = () => {
-        document.fonts.ready.then(() => {
-            drawWelcomeScreen();
-            console.log("It's time to BitCrunch!");
-        });
-    };
-};
+// (Waiting on all three together avoids a race where the logo finishes
+// loading before the sprite sheet and the welcome screen never draws.)
+const imageLoaded = img => img.complete && img.naturalWidth > 0
+    ? Promise.resolve()
+    : new Promise(resolve => img.addEventListener("load", resolve, { once: true }));
+
+Promise.all([imageLoaded(spriteSheet), imageLoaded(logoSprite), document.fonts.ready])
+    .then(() => {
+        drawGame();
+        console.log("It's time to BitCrunch!");
+    });
 
 // Start up our main framerate refresh
 setInterval(() => {

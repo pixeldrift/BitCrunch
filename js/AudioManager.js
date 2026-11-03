@@ -64,13 +64,12 @@ class SfxPlayer {
 
 // Background music: a playlist that advances to the next track when one ends
 class MusicPlayer {
-    static VOLUME = 0.2;
-
-    constructor(files) {
-        this.tracks = files.map((file, i) => {
-            const track = new Audio(file);
+    // `tracks` are { file, lufs } entries; see AudioManager.volumeFor()
+    constructor(tracks) {
+        this.tracks = tracks.map((info, i) => {
+            const track = new Audio(info.file);
             track.loop = false;
-            track.volume = MusicPlayer.VOLUME;
+            track.volume = AudioManager.volumeFor(info.lufs);
             track.preload = i === 0 ? "auto" : "none"; // Don't download all the music up front
             track.addEventListener("ended", () => this.next());
             return track;
@@ -105,23 +104,39 @@ class AudioManager {
         "laser", "fail", "success", "smallBoom",
     ];
 
-    static THEME_FILE = "audio/music/music-a.mp3";
+    // Every music file with its measured loudness (integrated LUFS, from ffmpeg's
+    // ebur128 filter). Volumes are computed from these so all tracks sound equally
+    // loud against the sound effects.
+    static THEME = { file: "audio/music/music-a.mp3", lufs: -13.3 };
 
-    static MUSIC_FILES = [
-        "audio/music/music-b.mp3", "audio/music/music-c.mp3", "audio/music/music-d.mp3",
-        "audio/music/music-e.mp3", "audio/music/music-f.mp3",
+    static MUSIC = [
+        { file: "audio/music/music-b.mp3", lufs: -9.2 },
+        { file: "audio/music/music-c.mp3", lufs: -10.2 },
+        { file: "audio/music/music-d.mp3", lufs: -10.5 },
+        { file: "audio/music/music-e.mp3", lufs: -15.2 },
+        { file: "audio/music/music-f.mp3", lufs: -8.0 },
     ];
+
+    // The level every track is matched to. This is track b at volume 0.2,
+    // which is what the game originally used to balance music against effects.
+    // Raise or lower this one number to make all the music louder or quieter.
+    static MUSIC_TARGET_LUFS = -23.2;
+
+    // The volume (0..1) that brings a track of the given loudness to the target
+    static volumeFor(lufs) {
+        return Math.min(1, Math.pow(10, (AudioManager.MUSIC_TARGET_LUFS - lufs) / 20));
+    }
 
     constructor() {
         this.sfxOn = true;
         this.musicOn = true;
         this.sfx = new SfxPlayer(AudioManager.SFX_NAMES, "audio/sfx");
-        this.music = new MusicPlayer(AudioManager.MUSIC_FILES);
+        this.music = new MusicPlayer(AudioManager.MUSIC);
 
         // The short theme that loops on the welcome and game-over screens
-        this.theme = new Audio(AudioManager.THEME_FILE);
+        this.theme = new Audio(AudioManager.THEME.file);
         this.theme.loop = true;
-        this.theme.volume = MusicPlayer.VOLUME;
+        this.theme.volume = AudioManager.volumeFor(AudioManager.THEME.lufs);
         this.theme.preload = "auto";
         this.themeWanted = false; // True while a screen that wants the theme is showing
 

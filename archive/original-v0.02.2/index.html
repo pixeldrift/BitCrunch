@@ -1,0 +1,221 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>BitCrunch Game</title>
+
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Silkscreen:wght@400;700&display=swap" rel="stylesheet">
+
+    <style>
+
+    #debugLog {
+        display: none;
+    }
+
+        body {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            background-color: #333;
+            color: #f16d01;
+            font-family: "Silkscreen", sans-serif;
+            font-weight: bold;
+            font-size: 1.4em;
+            overflow: hidden;
+        }
+
+        .game-container {
+            display: flex;
+            flex-direction: row; /* Side-by-side layout */
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            gap: 30px; /* Space between canvas & table */
+        }
+
+        /* Ensure canvas scales properly */
+        canvas {
+            border: 2px solid #f16d01;
+            max-width: 100%;
+            height: auto;
+            display: block;
+        }
+
+        /* Controls table styling */
+        #controlsChart,
+        #blocksChart {
+            border-collapse: collapse;
+            padding: 10px;
+            margin: 50px;
+        }
+        #blocksChart {
+            width: 600px;
+            font-size: .8em;
+        }
+
+        #controlsChart td,
+        #blocksChart td
+        {
+            padding: 12px 16px;
+            text-align: left;
+            font-size: 1em;
+        }
+
+        #controlsChart tr:nth-child(odd),
+        #blocksChart tr:nth-child(odd) {
+            background-color: #252525;
+        }
+
+        /* Rounded Corners */
+        #controlsChart td:first-child,
+        #controlsChart th:first-child,
+        #blocksChart td:first-child,
+        #blockssChart th:first-child {
+            border-radius: 10px 0 0 10px;
+        }
+
+        #controlsChart td:last-child,
+        #controlsChart th:last-child,
+        #blocksChart td:last-child,
+        #blocksChart th:last-child {
+            border-radius: 0 10px 10px 0;
+            color: #3090c0;
+        }
+
+        .blockSprite {
+            display: block;
+            width: 100px;
+            height: 60px;
+            background-color: #f16d01;
+            background: url(graphics/BitCrunch-Sprite-Sheet.png);
+        } 
+
+        #wildBlock {
+            background-position: -500px 0px;
+        }
+        #swapBlock {
+            background-position: -500px -60px;
+        }
+        #bombBlock {
+            background-position: -500px -120px;
+        }
+        #magnetBlock {
+            background-position: -500px -180px;
+        }
+        #zapBlock {
+            background-position: -500px -240px;
+        }
+        #bugBlock {
+            background-position: -500px -300px;
+        }
+        #nukeBlock {
+            background-position: -500px -360px;
+        }
+        #blasterBlock {
+            background-position: -500px -600px;
+        }
+
+        /* Mobile-specific adjustments */
+        @media (max-width: 768px) {
+            .game-container {
+                flex-direction: column;
+                height: 100vh;
+            }
+
+            /* Hide controls box on mobile */
+            #controlsChart {
+                display: none;
+            }
+            #blocksChart {
+                display: none;
+            }
+
+            canvas {
+                width: 90vw; /* Scale proportionally */
+                height: auto; /* Maintain aspect ratio */
+                max-height: 90vh; /* Ensure visibility */
+            }
+        }
+
+    </style>
+</head>
+<body>
+    <div class="game-container">
+        <canvas id="gameCanvas"></canvas>
+
+        <table id="controlsChart">
+            <tr><td>Enter</td><td>Start Game</td></tr>
+            <tr><td>&larr;&nbsp;&nbsp;A</td><td>Move Left</td></tr>
+            <tr><td>&rarr;&nbsp;&nbsp;D</td><td>Move Right</td></tr>
+            <tr><td>&darr;&nbsp;&nbsp;S&nbsp;&nbsp;␣</td><td>Drop Block</td></tr>
+            <tr><td>P&nbsp;&nbsp;Esc</td><td>Pause/Resume</td></tr>
+            <tr><td>T</td><td>Next Music Track</td></tr>
+            <tr><td>M</td><td>Toggle Music</td></tr>
+            <tr><td>F</td><td>Toggle Sound FX</td></tr>
+            <tr><td>G</td><td>Toggle Ghost</td></tr>
+            <tr><td>X&nbsp;&nbsp;Q</td><td>End Game</td></tr>
+        </table>
+
+        <table id="blocksChart">
+            <tr><td><div class="blockSprite" id="bugBlock"></div></td><td>1 - Bug - Doesn’t merge, can only be removed by other specials</td></tr>
+            <tr><td><div class="blockSprite" id="wildBlock"></td><td>2 Wild - Merges with any other block</td></tr>
+            <tr><td><div class="blockSprite" id="swapBlock"></td><td>3 - Swap - Makes any block swap with the one below it</td></tr>
+            <tr><td><div class="blockSprite" id="bombBlock"></div></td><td>4 - Bomb - Destroys any block it lands on</td></tr>
+            <tr><td><div class="blockSprite" id="magnetBlock"></div></td><td>5 - Magnet - Scrambles the blocks in a column</td></tr>
+            <tr><td><div class="blockSprite" id="zapBlock"></div></td><td>6 - Zap - Destroys touching blocks in the same row</td></tr>
+            <tr><td><div class="blockSprite" id="nukeBlock"></div></td><td>7 - Nuke - Destroys all blocks in the column</td></tr>
+            <tr><td><div class="blockSprite" id="blasterBlock"></div></td><td>8 - Blaster - Shoots blocks instead of dropping</td></tr>
+        </table>
+
+    </div>
+    <div id="debugLog" style="position: fixed; bottom: 10px; left: 10px; background: rgba(0,0,0,0.7); color: #fff; padding: 10px; font-size: 12px; z-index: 1000; max-height: 100px; overflow: auto;"></div>
+
+
+    <script src="BitCrunch.js"></script>
+
+    <script>
+
+        function adjustCanvasSize() {
+            let isMobile = window.innerWidth < 768;
+
+            if (isMobile) {
+                let aspectRatio = canvas.width / canvas.height;
+
+                // Get the actual usable viewport height (excluding Safari bars)
+                let viewportHeight = window.visualViewport ? window.visualViewport.height : window.innerHeight;
+
+                let newHeight = viewportHeight * 0.9; // Use 90% of available space to avoid clipping
+                let newWidth = newHeight * aspectRatio; // Scale width accordingly
+
+                // Apply new size
+                canvas.style.width = `${newWidth}px`;
+                canvas.style.height = `${newHeight}px`;
+
+                // Centering
+                canvas.style.position = "absolute";
+                canvas.style.top = "50%";
+                canvas.style.left = "50%";
+                canvas.style.transform = "translate(-50%, -50%)";
+
+            } else {
+                // Reset for desktop mode
+                canvas.style.width = "";
+                canvas.style.height = "";
+                canvas.style.position = "";
+                canvas.style.transform = "";
+            }
+        }
+
+        // Adjust on load and when resizing
+        window.addEventListener("resize", adjustCanvasSize);
+        window.addEventListener("load", adjustCanvasSize);
+
+
+    </script>
+
+</body>
+</html>

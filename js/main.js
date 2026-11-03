@@ -28,6 +28,7 @@
     // Show the welcome screen once the images and fonts are ready
     Promise.all([renderer.whenReady(), document.fonts.ready]).then(() => {
         game.draw();
+        audio.playTheme(); // Starts on the first tap or key press if the browser blocks it now
         console.log("It's time to BitCrunch!");
     });
 

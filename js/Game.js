@@ -99,6 +99,7 @@ class Game {
         this.swapInProgress = false;
         this.countdownValue = 3;
 
+        this.audio.stopTheme();
         this.audio.stopMusic();
         this.audio.startMusic();
 
@@ -110,6 +111,7 @@ class Game {
     returnToWelcome() {
         this.state = GameState.WELCOME;
         this.renderer.cancelOverlay();
+        this.audio.playTheme();
         this.draw();
     } // returnToWelcome
 
@@ -177,6 +179,7 @@ class Game {
 
         this.audio.stopMusic();
         this.audio.play("gameOver");
+        this.audio.playTheme();
 
         this.renderer.showScoreboard(this);
         this.renderer.drawHud(this);
@@ -376,6 +379,7 @@ class Game {
 
     toggleMusic() {
         this.audio.toggleMusic();
+        if (this.isPaused) this.audio.pauseMusic(); // Turning music on shouldn't unpause it
         this.renderer.drawHud(this);
     } // toggleMusic
 

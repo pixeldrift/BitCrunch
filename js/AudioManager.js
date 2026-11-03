@@ -64,10 +64,13 @@ class SfxPlayer {
 
 // Background music: a playlist that advances to the next track when one ends
 class MusicPlayer {
+    static VOLUME = 0.2;
+
     constructor(files) {
         this.tracks = files.map((file, i) => {
             const track = new Audio(file);
             track.loop = false;
+            track.volume = MusicPlayer.VOLUME;
             track.preload = i === 0 ? "auto" : "none"; // Don't download all the music up front
             track.addEventListener("ended", () => this.next());
             return track;
@@ -102,6 +105,8 @@ class AudioManager {
         "laser", "fail", "success", "smallBoom",
     ];
 
+    static THEME_FILE = "audio/music/music-a.mp3";
+
     static MUSIC_FILES = [
         "audio/music/music-b.mp3", "audio/music/music-c.mp3", "audio/music/music-d.mp3",
         "audio/music/music-e.mp3", "audio/music/music-f.mp3",
@@ -112,11 +117,37 @@ class AudioManager {
         this.musicOn = true;
         this.sfx = new SfxPlayer(AudioManager.SFX_NAMES, "audio/sfx");
         this.music = new MusicPlayer(AudioManager.MUSIC_FILES);
+
+        // The short theme that loops on the welcome and game-over screens
+        this.theme = new Audio(AudioManager.THEME_FILE);
+        this.theme.loop = true;
+        this.theme.volume = MusicPlayer.VOLUME;
+        this.theme.preload = "auto";
+        this.themeWanted = false; // True while a screen that wants the theme is showing
+
+        // Browsers won't play audio before the first tap or key press, so if the
+        // title screen asked for the theme too early, start it on that first gesture.
+        const retry = () => { if (this.themeWanted) this.playTheme(); };
+        ["pointerdown", "touchend", "click", "keydown"].forEach(type =>
+            window.addEventListener(type, retry, { passive: true })
+        );
     }
 
     // Play a sound effect by name (see SFX_NAMES)
     play(name) {
         if (this.sfxOn) this.sfx.play(name);
+    }
+
+    // Loop the welcome / game-over theme (if music is on)
+    playTheme() {
+        this.themeWanted = true;
+        if (this.musicOn && this.theme.paused) this.theme.play().catch(() => {});
+    }
+
+    stopTheme() {
+        this.themeWanted = false;
+        this.theme.pause();
+        this.theme.currentTime = 0;
     }
 
     // Start the background music if it's enabled and not already playing
@@ -137,7 +168,10 @@ class AudioManager {
     }
 
     toggleMusic() {
-        if (this.musicOn) this.music.pause(); else this.music.play();
+        // Whatever is supposed to be playing right now: the theme, or the game music
+        const active = this.themeWanted ? this.theme : this.music.current;
+
+        if (this.musicOn) active.pause(); else active.play().catch(() => {});
         this.musicOn = !this.musicOn;
     }
 } // class AudioManager

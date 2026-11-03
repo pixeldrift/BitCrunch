@@ -288,7 +288,12 @@ class WindowController {
     constructor(game) {
         window.addEventListener("blur", () => game.pauseIfPlaying());
         document.addEventListener("visibilitychange", () => {
-            if (document.hidden) game.pauseIfPlaying();
+            if (document.hidden) {
+                game.pauseIfPlaying();
+                game.audio.suspend(); // Don't keep playing in the background
+            } else {
+                game.audio.resume();
+            }
         });
     }
 } // class WindowController

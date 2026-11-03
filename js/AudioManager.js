@@ -10,12 +10,10 @@
 // element or re-decode an MP3 mid-frame. Falls back to the plain <audio>
 // element if Web Audio isn't available or hasn't unlocked yet.
 class SfxPlayer {
-    constructor(names, folder) {
+    constructor(names, folder, context) {
         this.elements = new Map(); // name -> <audio>, used for the fallback path
         this.buffers = new Map();  // name -> decoded AudioBuffer
-
-        const AudioCtx = window.AudioContext || window.webkitAudioContext;
-        this.context = AudioCtx ? new AudioCtx() : null;
+        this.context = context;    // Shared AudioContext, or null if unsupported
 
         names.forEach(name => {
             const element = new Audio(`${folder}/${name}Sound.mp3`);
@@ -23,16 +21,6 @@ class SfxPlayer {
             this.elements.set(name, element);
             if (this.context) this.load(name, element.src);
         });
-
-        if (!this.context) return;
-
-        // iOS keeps the audio context suspended until a user gesture
-        const unlock = () => {
-            if (this.context.state === "suspended") this.context.resume();
-        };
-        ["pointerdown", "touchend", "click", "keydown"].forEach(type =>
-            window.addEventListener(type, unlock, { passive: true })
-        );
     }
 
     load(name, url) {
@@ -64,12 +52,14 @@ class SfxPlayer {
 
 // Background music: a playlist that advances to the next track when one ends
 class MusicPlayer {
-    // `tracks` are { file, lufs } entries; see AudioManager.volumeFor()
-    constructor(tracks) {
+    // `tracks` are { file, lufs } entries. The manager sets each track's volume
+    // (see AudioManager.attachMusic) and starts playback.
+    constructor(tracks, audio) {
+        this.audio = audio;
         this.tracks = tracks.map((info, i) => {
             const track = new Audio(info.file);
             track.loop = false;
-            track.volume = AudioManager.volumeFor(info.lufs);
+            audio.attachMusic(track, info.lufs);
             track.preload = i === 0 ? "auto" : "none"; // Don't download all the music up front
             track.addEventListener("ended", () => this.next());
             return track;
@@ -80,7 +70,7 @@ class MusicPlayer {
     get current() { return this.tracks[this.index]; }
     get isPaused() { return this.current.paused; }
 
-    play() { this.current.play().catch(() => {}); }
+    play() { this.audio.playElement(this.current); }
     pause() { this.current.pause(); }
 
     stop() {
@@ -130,22 +120,90 @@ class AudioManager {
     constructor() {
         this.sfxOn = true;
         this.musicOn = true;
-        this.sfx = new SfxPlayer(AudioManager.SFX_NAMES, "audio/sfx");
-        this.music = new MusicPlayer(AudioManager.MUSIC);
+
+        // One Web Audio context for everything. Sound effects play through it as
+        // buffers; music streams from <audio> elements routed through volume
+        // (gain) nodes. iPhones ignore <audio>.volume, but honor gain nodes.
+        const AudioCtx = window.AudioContext || window.webkitAudioContext;
+        this.context = AudioCtx ? new AudioCtx() : null;
+
+        // A page opened from disk (file://) can't be routed: the browser treats
+        // the audio files as another origin and mutes them. Use plain volume there.
+        this.routeMusic = this.context !== null && location.protocol !== "file:";
+        this.musicGains = []; // Kept for inspection / tests
+
+        this.sfx = new SfxPlayer(AudioManager.SFX_NAMES, "audio/sfx", this.context);
+        this.music = new MusicPlayer(AudioManager.MUSIC, this);
 
         // The short theme that loops on the welcome and game-over screens
         this.theme = new Audio(AudioManager.THEME.file);
         this.theme.loop = true;
-        this.theme.volume = AudioManager.volumeFor(AudioManager.THEME.lufs);
         this.theme.preload = "auto";
+        this.attachMusic(this.theme, AudioManager.THEME.lufs);
         this.themeWanted = false; // True while a screen that wants the theme is showing
 
-        // Browsers won't play audio before the first tap or key press, so if the
-        // title screen asked for the theme too early, start it on that first gesture.
-        const retry = () => { if (this.themeWanted) this.playTheme(); };
+        this.suspended = false;   // Silenced because the page is hidden
+        this.resumeAfterHidden = { theme: false, music: false };
+
+        // Browsers won't play audio before the first tap or key press: wake the
+        // context then, and start the theme if the title screen asked for it early.
+        const unlock = () => {
+            if (this.context && this.context.state === "suspended" && !this.suspended) {
+                this.context.resume();
+            }
+            if (this.themeWanted) this.playTheme();
+        };
         ["pointerdown", "touchend", "click", "keydown"].forEach(type =>
-            window.addEventListener(type, retry, { passive: true })
+            window.addEventListener(type, unlock, { passive: true })
         );
+    }
+
+
+    // Set an <audio> element's loudness from its measured level
+    attachMusic(element, lufs) {
+        const volume = AudioManager.volumeFor(lufs);
+
+        if (!this.routeMusic) {
+            element.volume = volume;
+            return;
+        }
+
+        const gain = this.context.createGain();
+        gain.gain.value = volume;
+        this.context.createMediaElementSource(element).connect(gain).connect(this.context.destination);
+        this.musicGains.push(gain);
+    }
+
+
+    // Play an <audio> element, waking the audio context if needed
+    playElement(element) {
+        if (this.context && this.context.state === "suspended" && !this.suspended) {
+            this.context.resume();
+        }
+        element.play().catch(() => {});
+    }
+
+
+    // Silence everything while the page is hidden (iOS keeps playing otherwise)
+    suspend() {
+        if (this.suspended) return;
+        this.suspended = true;
+        this.resumeAfterHidden = { theme: !this.theme.paused, music: !this.music.isPaused };
+
+        this.theme.pause();
+        this.music.pause();
+        if (this.context) this.context.suspend();
+    }
+
+    // Bring back whatever was playing before suspend()
+    resume() {
+        if (!this.suspended) return;
+        this.suspended = false;
+        if (this.context) this.context.resume();
+
+        if (this.resumeAfterHidden.theme) this.playElement(this.theme);
+        if (this.resumeAfterHidden.music) this.music.play();
+        this.resumeAfterHidden = { theme: false, music: false };
     }
 
     // Play a sound effect by name (see SFX_NAMES)
@@ -156,7 +214,7 @@ class AudioManager {
     // Loop the welcome / game-over theme (if music is on)
     playTheme() {
         this.themeWanted = true;
-        if (this.musicOn && this.theme.paused) this.theme.play().catch(() => {});
+        if (this.musicOn && this.theme.paused && !this.suspended) this.playElement(this.theme);
     }
 
     stopTheme() {
@@ -186,7 +244,7 @@ class AudioManager {
         // Whatever is supposed to be playing right now: the theme, or the game music
         const active = this.themeWanted ? this.theme : this.music.current;
 
-        if (this.musicOn) active.pause(); else active.play().catch(() => {});
+        if (this.musicOn) active.pause(); else this.playElement(active);
         this.musicOn = !this.musicOn;
     }
 } // class AudioManager

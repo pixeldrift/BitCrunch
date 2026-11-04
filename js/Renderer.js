@@ -8,6 +8,7 @@
 // Nothing here knows about input or sound.
 class Renderer {
     static SCOREBAR_SHADOW_PAD = 50;
+    static LASER_GLOW_PAD = 28;
 
     constructor(canvas) {
         this.canvas = canvas;
@@ -18,6 +19,7 @@ class Renderer {
         this.hud = new Hud();
         this.overlayTimer = null;   // Timer for the pause / game-over fill animation
         this.scorebarImage = null;  // Cached scorebar with its drop shadow
+        this.imageCache = new Map();// Pre-rendered glows, keyed by name
 
         this.spriteSheet = new Image();
         this.spriteSheet.src = "graphics/BitCrunch-Sprite-Sheet.png";
@@ -33,6 +35,102 @@ class Renderer {
             : new Promise(resolve => img.addEventListener("load", resolve, { once: true }));
         return Promise.all([loaded(this.spriteSheet), loaded(this.logoImage)]);
     } // whenReady
+
+
+    // Build the glow images up front so the first explosion doesn't hitch
+    prepare() {
+        Sprites.explosion.forEach((_, i) => this.explosionGlow(i));
+        this.laserGlow();
+        this.ghostImage();
+        this.zapGlow();
+        this.getScorebarImage();
+    } // prepare
+
+
+    // ====================
+    // Pre-rendered glows
+    // ====================
+    // Blur (shadowBlur) is very slow on mobile GPUs when drawn every frame. So
+    // each glow is blurred ONCE into an offscreen canvas, then drawn each frame
+    // as a plain image, which is cheap.
+
+    // Render drawFn(ctx) into a new canvas of the given size, once per key
+    cached(key, width, height, drawFn) {
+        let image = this.imageCache.get(key);
+        if (!image) {
+            image = document.createElement("canvas");
+            image.width = width;
+            image.height = height;
+            drawFn(image.getContext("2d"));
+            this.imageCache.set(key, image);
+        }
+        return image;
+    } // cached
+
+
+    // Draw only the soft halo of a sprite's shape (not the sprite itself). A
+    // shadow can't be drawn without its object, so the sprite is drawn far off
+    // the canvas and its shadow is offset back into view.
+    drawHalo(g, sprite, x, y, width, height, color, blur, passes) {
+        const FAR = 4000;
+        g.shadowColor = color;
+        g.shadowBlur = blur;
+        g.shadowOffsetX = FAR;
+        for (let i = 0; i < passes; i++) {
+            g.drawImage(
+                this.spriteSheet,
+                sprite.x, sprite.y, sprite.width, sprite.height,
+                x - FAR, y, width, height
+            );
+        }
+    } // drawHalo
+
+
+    // Halo for one explosion frame
+    explosionGlow(frame) {
+        const PAD = 28;
+        const sprite = Sprites.explosion[frame];
+        return this.cached(`explosion${frame}`, sprite.width + PAD * 2, sprite.height + PAD * 2, g =>
+            this.drawHalo(g, sprite, PAD, PAD, sprite.width, sprite.height, "rgba(255, 150, 20, 1)", 22, 2));
+    } // explosionGlow
+
+
+    // Halo for a laser beam long enough to reach the bottom of the grid. Shorter
+    // beams use slices of it (see drawLaser).
+    laserGlow() {
+        const PAD = Renderer.LASER_GLOW_PAD;
+        const sprite = Sprites.laser;
+        return this.cached("laser", sprite.width + PAD * 2, Config.GRID_HEIGHT + PAD * 2, g =>
+            this.drawHalo(g, sprite, PAD, PAD, sprite.width, Config.GRID_HEIGHT, "rgba(255, 140, 0, 1)", 20, 3));
+    } // laserGlow
+
+
+    // The ghost block: faint fill and outline with an orange glow
+    ghostImage() {
+        const PAD = 30;
+        return this.cached("ghost", Config.BLOCK_WIDTH + PAD * 2, Config.BLOCK_HEIGHT + PAD * 2, g => {
+            g.lineWidth = 3;
+            g.fillStyle = "rgba(173, 216, 230, 0.1)";
+            g.strokeStyle = "rgba(241, 109, 1, 0.25)";
+            g.shadowColor = "rgba(241, 109, 1, 0.5)";
+            g.shadowBlur = 16;
+            g.fillRect(PAD, PAD, Config.BLOCK_WIDTH, Config.BLOCK_HEIGHT);
+            g.strokeRect(PAD, PAD, Config.BLOCK_WIDTH, Config.BLOCK_HEIGHT);
+        });
+    } // ghostImage
+
+
+    // The yellow glow behind each zapped block
+    zapGlow() {
+        const PAD = 44;
+        const inset = 2;
+        return this.cached("zap", Config.BLOCK_WIDTH + PAD * 2, Config.BLOCK_HEIGHT + PAD * 2, g => {
+            g.shadowColor = "rgba(255, 255, 0, 1)";
+            g.shadowBlur = 30;
+            g.fillStyle = "rgba(255, 255, 0, 0.25)";
+            g.fillRect(PAD + inset, PAD + inset, Config.BLOCK_WIDTH - inset * 2, Config.BLOCK_HEIGHT - inset * 2);
+        });
+    } // zapGlow
 
 
     // Convert a pointer event to canvas coordinates. The canvas is scaled with
@@ -210,31 +308,26 @@ class Renderer {
         const ghostY = active ? game.board.ghostY(active.x) : null;
 
         if (active && game.options.showGhost) {
-            // The glow is faked with a wider, fainter outline. shadowBlur is
-            // very slow on mobile GPUs when drawn every frame.
-            ctx.lineWidth = 9;
-            ctx.strokeStyle = "rgba(241, 109, 1, 0.1)";
-            ctx.strokeRect(active.x, ghostY, BLOCK_WIDTH, BLOCK_HEIGHT);
-            ctx.lineWidth = 3;
-            ctx.fillStyle = "rgba(173, 216, 230, 0.1)";
-            ctx.strokeStyle = "rgba(241, 109, 1, 0.25)";
-            ctx.fillRect(active.x, ghostY, BLOCK_WIDTH, BLOCK_HEIGHT);
-            ctx.strokeRect(active.x, ghostY, BLOCK_WIDTH, BLOCK_HEIGHT);
+            const pad = 30; // Matches ghostImage()
+            ctx.drawImage(this.ghostImage(), active.x - pad, ghostY - pad);
         }
 
         // Blaster beam, from the blaster down to the landing spot
         if (effects.laser && active) {
-            this.drawSprite(
-                Sprites.laser,
-                active.x, active.y + BLOCK_HEIGHT,
-                BLOCK_WIDTH, ghostY - active.y + BLOCK_HEIGHT
-            );
+            this.drawLaser(active.x, active.y + BLOCK_HEIGHT, ghostY - active.y + BLOCK_HEIGHT);
         }
 
         // Explosions
         for (const explosion of effects.explosions) {
             const frame = Sprites.explosion[explosion.frame];
-            if (frame) this.drawSprite(frame, explosion.x, explosion.y, BLOCK_WIDTH, BLOCK_HEIGHT);
+            if (!frame) continue;
+
+            // Glow adds light (additive), then the explosion itself on top
+            const pad = 28; // Matches explosionGlow()
+            ctx.globalCompositeOperation = "lighter";
+            ctx.drawImage(this.explosionGlow(explosion.frame), explosion.x - pad, explosion.y - pad);
+            ctx.globalCompositeOperation = "source-over";
+            this.drawSprite(frame, explosion.x, explosion.y, BLOCK_WIDTH, BLOCK_HEIGHT);
         }
 
         if (effects.lightning) this.drawLightning(effects.lightning);
@@ -249,6 +342,26 @@ class Renderer {
     } // drawPlayingScreen
 
 
+    // The beam, with its glow. `length` is how far down it reaches.
+    drawLaser(x, y, length) {
+        const ctx = this.ctx;
+        const pad = Renderer.LASER_GLOW_PAD;
+        const glow = this.laserGlow();
+        const glowWidth = Config.BLOCK_WIDTH + pad * 2;
+        const maxLength = Config.GRID_HEIGHT;
+        length = Math.min(length, maxLength);
+
+        // The glow image is for a full-height beam: take the top and body, then
+        // the rounded bottom end, so any shorter beam gets a proper glow.
+        ctx.globalCompositeOperation = "lighter";
+        ctx.drawImage(glow, 0, 0, glowWidth, pad + length, x - pad, y - pad, glowWidth, pad + length);
+        ctx.drawImage(glow, 0, pad + maxLength, glowWidth, pad, x - pad, y + length, glowWidth, pad);
+        ctx.globalCompositeOperation = "source-over";
+
+        this.drawSprite(Sprites.laser, x, y, Config.BLOCK_WIDTH, length);
+    } // drawLaser
+
+
     drawLightning({ centerX, rowY, blocks }) {
         const ctx = this.ctx;
         const { BLOCK_WIDTH, BLOCK_HEIGHT } = Config;
@@ -258,13 +371,10 @@ class Renderer {
         const minX = Math.min(...xs);
         const maxX = Math.max(...xs);
 
-        // Glow around each zapped block, faked with a larger, fainter rect
-        blocks.forEach(({ x, y }) => {
-            ctx.fillStyle = "rgba(255, 255, 0, 0.12)";
-            ctx.fillRect(x - 6, y - 6, BLOCK_WIDTH + 12, BLOCK_HEIGHT + 12);
-            ctx.fillStyle = "rgba(255, 255, 0, 0.25)";
-            ctx.fillRect(x + 2, y + 2, BLOCK_WIDTH - 4, BLOCK_HEIGHT - 4);
-        });
+        // Glow around each zapped block
+        const glow = this.zapGlow();
+        const glowPad = 44; // Matches zapGlow()
+        blocks.forEach(({ x, y }) => ctx.drawImage(glow, x - glowPad, y - glowPad));
 
         const halfWidth = BLOCK_WIDTH / 2;
         const rightWidth = maxX + BLOCK_WIDTH - (centerX + halfWidth);

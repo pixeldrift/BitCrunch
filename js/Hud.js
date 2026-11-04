@@ -37,8 +37,6 @@ class Hud {
         ctx.clearRect(0, 0, w, h);
         ctx.fillStyle = "#222";
         ctx.fillRect(0, 0, w, h);
-        ctx.fillStyle = "#f16d01";
-        ctx.fillRect(0, h - 2, w, 2);
 
         const textY = this.scorebarY + 28;
 

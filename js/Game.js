@@ -150,11 +150,13 @@ class Game {
             this.state = GameState.PAUSED;
             this.stopLoop();
             this.audio.pauseMusic();
+            this.audio.playTheme(); // The theme loops while paused
             this.audio.play("pause");
             this.renderer.showPause(this);
         } else {
             this.state = GameState.PLAYING;
             this.renderer.cancelOverlay();
+            this.audio.stopTheme();
             this.audio.resumeMusic();
             this.startLoop();
         }

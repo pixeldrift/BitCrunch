@@ -45,6 +45,8 @@ const Config = Object.freeze({
     TOUCH_LOCK_DISTANCE: 12,     // Movement before a touch counts as a drag/swipe
     TOUCH_SWIPE_DISTANCE: 60,    // Vertical travel to drop / pause
 
+    MAX_PIXEL_RATIO: 2,          // Sharper on retina screens, capped for speed
+
     HIGH_SCORE_KEY: "bitCrunchHighScore",
 
     // The Play button on the welcome screen (grid coordinates)

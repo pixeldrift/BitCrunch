@@ -13,13 +13,20 @@ class Renderer {
     constructor(canvas) {
         this.canvas = canvas;
         this.ctx = canvas.getContext("2d");
-        canvas.width = Config.GRID_WIDTH;
-        canvas.height = Config.GRID_HEIGHT + Config.HUD_HEIGHT;
+
+        // Draw at the screen's pixel density (capped: every extra pixel costs
+        // frame time on a phone). All drawing code keeps using the 400 x 790
+        // logical size; the context scales it up.
+        this.totalHeight = Config.GRID_HEIGHT + Config.HUD_HEIGHT;
+        this.scale = Math.max(1, Math.min(window.devicePixelRatio || 1, Config.MAX_PIXEL_RATIO));
+        canvas.width = Math.round(Config.GRID_WIDTH * this.scale);
+        canvas.height = Math.round(this.totalHeight * this.scale);
+        this.ctx.setTransform(this.scale, 0, 0, this.scale, 0, 0);
 
         this.hud = new Hud();
         this.overlayTimer = null;   // Timer for the pause / game-over fill animation
-        this.scorebarImage = null;  // Cached scorebar with its drop shadow
-        this.imageCache = new Map();// Pre-rendered glows, keyed by name
+        this.imageCache = new Map();// Pre-rendered glows and the scorebar, keyed by name
+        this.hudKey = null;         // What the HUD last drew, so it's only redrawn on change
 
         this.spriteSheet = new Image();
         this.spriteSheet.src = "graphics/BitCrunch-Sprite-Sheet.png";
@@ -59,13 +66,24 @@ class Renderer {
         let image = this.imageCache.get(key);
         if (!image) {
             image = document.createElement("canvas");
-            image.width = width;
-            image.height = height;
-            drawFn(image.getContext("2d"));
+            image.width = Math.round(width * this.scale);
+            image.height = Math.round(height * this.scale);
+            image.logicalWidth = width;
+            image.logicalHeight = height;
+
+            const g = image.getContext("2d");
+            g.scale(this.scale, this.scale);
+            drawFn(g);
             this.imageCache.set(key, image);
         }
         return image;
     } // cached
+
+
+    // Draw a cached image with its top-left at (x, y), at its logical size
+    blit(image, x, y) {
+        this.ctx.drawImage(image, x, y, image.logicalWidth, image.logicalHeight);
+    } // blit
 
 
     // Draw only the soft halo of a sprite's shape (not the sprite itself). A
@@ -138,8 +156,8 @@ class Renderer {
     toCanvasPoint(event) {
         const rect = this.canvas.getBoundingClientRect();
         return {
-            x: (event.clientX - rect.left) * (this.canvas.width / rect.width),
-            y: (event.clientY - rect.top) * (this.canvas.height / rect.height),
+            x: (event.clientX - rect.left) * (Config.GRID_WIDTH / rect.width),
+            y: (event.clientY - rect.top) * (this.totalHeight / rect.height),
         };
     } // toCanvasPoint
 
@@ -154,7 +172,14 @@ class Renderer {
         if (game.isPaused || game.isGameOver) return;
 
         const ctx = this.ctx;
-        ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
+
+        // The grid redraws every frame, clipped to its own area so it can never
+        // spill onto the HUD (shaking moves it a few pixels)
+        ctx.save();
+        ctx.beginPath();
+        ctx.rect(0, Config.HUD_HEIGHT, Config.GRID_WIDTH, Config.GRID_HEIGHT);
+        ctx.clip();
+        ctx.clearRect(0, Config.HUD_HEIGHT, Config.GRID_WIDTH, Config.GRID_HEIGHT);
 
         // Screen shake moves the grid but never the HUD
         const shakeOffset = game.effects.shakeOffset();
@@ -171,15 +196,24 @@ class Renderer {
             case GameState.PLAYING:   this.drawPlayingScreen(game); break;
         }
 
-        ctx.restore();
+        ctx.restore(); // Shake and grid offset
+        ctx.restore(); // Clip
 
-        this.drawHud(game);
+        // The HUD only changes now and then, so it's redrawn only when it does
+        if (this.currentHudKey(game) !== this.hudKey) this.drawHud(game);
 
         if (shakeOffset) game.requestDraw(); // Keep frames coming if the loop isn't running
     } // draw
 
 
+    // Everything the HUD shows, as a string. When it changes, the HUD needs redrawing.
+    currentHudKey(game) {
+        return `${game.score}|${game.level}|${game.audio.musicOn}|${game.audio.sfxOn}|${game.options.drawScorebar}`;
+    } // currentHudKey
+
+
     drawHud(game) {
+        this.hudKey = this.currentHudKey(game);
         this.hud.draw(this.ctx, game, this.getScorebarImage(), Renderer.SCOREBAR_SHADOW_PAD);
     } // drawHud
 
@@ -224,23 +258,16 @@ class Renderer {
     // The scorebar has a blurred drop shadow, which is expensive to draw every
     // frame. Render it once into an offscreen canvas and reuse that.
     getScorebarImage() {
-        if (this.scorebarImage) return this.scorebarImage;
-
         const pad = Renderer.SCOREBAR_SHADOW_PAD;
         const bar = Sprites.scoreBar;
-        const off = document.createElement("canvas");
-        off.width = 300 + pad * 2;
-        off.height = 42 + pad * 2;
 
-        const offCtx = off.getContext("2d");
-        offCtx.shadowColor = "rgba(0, 0, 0, 0.5)";
-        offCtx.shadowOffsetX = 10;
-        offCtx.shadowOffsetY = 10;
-        offCtx.shadowBlur = 20;
-        offCtx.drawImage(this.spriteSheet, bar.x, bar.y, bar.width, bar.height, pad, pad, 300, 42);
-
-        this.scorebarImage = off;
-        return off;
+        return this.cached("scorebar", 300 + pad * 2, 42 + pad * 2, g => {
+            g.shadowColor = "rgba(0, 0, 0, 0.5)";
+            g.shadowOffsetX = 10;
+            g.shadowOffsetY = 10;
+            g.shadowBlur = 20;
+            g.drawImage(this.spriteSheet, bar.x, bar.y, bar.width, bar.height, pad, pad, 300, 42);
+        });
     } // getScorebarImage
 
 
@@ -309,7 +336,7 @@ class Renderer {
 
         if (active && game.options.showGhost) {
             const pad = 30; // Matches ghostImage()
-            ctx.drawImage(this.ghostImage(), active.x - pad, ghostY - pad);
+            this.blit(this.ghostImage(), active.x - pad, ghostY - pad);
         }
 
         // Blaster beam, from the blaster down to the landing spot
@@ -325,7 +352,7 @@ class Renderer {
             // Glow adds light (additive), then the explosion itself on top
             const pad = 28; // Matches explosionGlow()
             ctx.globalCompositeOperation = "lighter";
-            ctx.drawImage(this.explosionGlow(explosion.frame), explosion.x - pad, explosion.y - pad);
+            this.blit(this.explosionGlow(explosion.frame), explosion.x - pad, explosion.y - pad);
             ctx.globalCompositeOperation = "source-over";
             this.drawSprite(frame, explosion.x, explosion.y, BLOCK_WIDTH, BLOCK_HEIGHT);
         }
@@ -354,8 +381,9 @@ class Renderer {
         // The glow image is for a full-height beam: take the top and body, then
         // the rounded bottom end, so any shorter beam gets a proper glow.
         ctx.globalCompositeOperation = "lighter";
-        ctx.drawImage(glow, 0, 0, glowWidth, pad + length, x - pad, y - pad, glowWidth, pad + length);
-        ctx.drawImage(glow, 0, pad + maxLength, glowWidth, pad, x - pad, y + length, glowWidth, pad);
+        const k = this.scale; // Source coordinates are in the image's own pixels
+        ctx.drawImage(glow, 0, 0, glowWidth * k, (pad + length) * k, x - pad, y - pad, glowWidth, pad + length);
+        ctx.drawImage(glow, 0, (pad + maxLength) * k, glowWidth * k, pad * k, x - pad, y + length, glowWidth, pad);
         ctx.globalCompositeOperation = "source-over";
 
         this.drawSprite(Sprites.laser, x, y, Config.BLOCK_WIDTH, length);
@@ -374,7 +402,7 @@ class Renderer {
         // Glow around each zapped block
         const glow = this.zapGlow();
         const glowPad = 44; // Matches zapGlow()
-        blocks.forEach(({ x, y }) => ctx.drawImage(glow, x - glowPad, y - glowPad));
+        blocks.forEach(({ x, y }) => this.blit(glow, x - glowPad, y - glowPad));
 
         const halfWidth = BLOCK_WIDTH / 2;
         const rightWidth = maxX + BLOCK_WIDTH - (centerX + halfWidth);

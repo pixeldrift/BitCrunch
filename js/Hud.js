@@ -41,7 +41,8 @@ class Hud {
         const textY = this.scorebarY + 28;
 
         if (game.options.drawScorebar) {
-            ctx.drawImage(scorebarImage, 50 - shadowPad, this.scorebarY - shadowPad);
+            ctx.drawImage(scorebarImage, 50 - shadowPad, this.scorebarY - shadowPad,
+                scorebarImage.logicalWidth, scorebarImage.logicalHeight);
 
             ctx.fillStyle = "white";
             ctx.font = "24px Silkscreen";

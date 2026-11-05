@@ -4,7 +4,7 @@
 // MAIN
 // ====================
 // Wires the pieces together and starts the game. This is the only file that
-// touches the page itself (the canvas element and the font).
+// touches the page itself (the canvas element).
 
 (function main() {
     const canvas = document.getElementById("gameCanvas"); // Named in the HTML
@@ -18,15 +18,11 @@
     new TouchController(game, renderer, canvas);
     new WindowController(game);
 
-    // Load the pixel font from Google Fonts
-    const font = new FontFace(
-        "Silkscreen",
-        "url(https://fonts.gstatic.com/s/silkscreen/v4/m8JXjfVPf62XiF7kO-i9YLNla0GA1dM.woff2)"
-    );
-    font.load().then(loaded => document.fonts.add(loaded)).catch(() => {});
-
     // Show the welcome screen once the images and fonts are ready
-    Promise.all([renderer.whenReady(), document.fonts.ready]).then(() => {
+    // The font comes from index.html (self-hosted); wait for it so the first screen isn't drawn in a fallback font
+    const fontReady = document.fonts.load('24px Silkscreen').catch(() => {});
+
+    Promise.all([renderer.whenReady(), fontReady]).then(() => {
         renderer.prepare();
         game.draw();
         audio.playTheme(); // Starts on the first tap or key press if the browser blocks it now

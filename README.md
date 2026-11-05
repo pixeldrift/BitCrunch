@@ -169,17 +169,58 @@ There is also a 10% chance of receiving a special block vs. a standard numeric b
 	•	￼Make native iPhone port
 
 
+## Levels and Difficulty
+
+The game speeds up as you play. Every 10 blocks you place is a new level:
+
+```
+Level	Time for a block to fall the whole grid
+1		12.0 s
+5		7.6 s
+10		4.3 s
+15		2.5 s
+20+		1.5 s (top speed)
+```
+
+Also as the levels rise:
+
+- The pause after a block lands (before it merges) gets shorter.
+- From level 4, **junk blocks** (the plain tan ones) rise from the bottom of a few columns every so often. Junk never merges, and can only be cleared with specials (Bomb, Zap, Nuke, Blaster, or a Wild landing on it). The HUD shows `JUNK IN n`, which turns red when it's close.
+- The helpful specials (Bomb, Nuke, Zap, Blaster) show up less, and Bugs show up more.
+
+Every number is in `js/Config.js`, and the rules are in `js/Difficulty.js`. After changing them, run the tests: they include a bot that plays whole games, to check the game is still beatable but doesn't last forever.
+
+
+## Running the Tests
+
+No setup needed (just Node):
+
+```
+node tests/run.js
+```
+
+The game logic runs headless with a fake clock, so a few hundred blocks of play take a fraction of a second. The tests cover every special block, the board, the level and junk rules, and a bot that plays full games. `tests/bot.js` can also be used to compare difficulty settings.
+
+
+## Publishing
+
+It's a static site: upload `index.html`, `manifest.webmanifest`, `sw.js`, and the `js/`, `graphics/`, `audio/`, `fonts/`, and `icons/` folders. The service worker saves the game on the player's device so it loads fast and works offline. **When you publish a change, bump `CACHE_VERSION` in `sw.js` and `VERSION` in `js/Config.js` to the same number** (a test checks they match); otherwise players keep seeing the old saved files.
+
+Players can add it to their iPhone home screen (Share, then Add to Home Screen) for a fullscreen, app-like game.
+
+
 ## Code Structure
 
 The game is plain JavaScript (no build step, no modules, so `index.html` opens straight from disk). The scripts load in this order:
 
 ```
-js/Config.js        Constants and sprite sheet rectangles
+js/Config.js        Constants (including every difficulty number) and sprite rectangles
 js/Block.js         A block: position + type
 js/BlockTypes.js    One class per kind of block (numbers and each special), the
                     block catalog, and the weighted spawner
-js/Board.js         The settled blocks and queries about them (pure data)
-js/Effects.js       Popups, explosions, laser, lightning, screen shake
+js/Board.js         The settled blocks as a 4x12 grid, plus gravity (pure data)
+js/Effects.js       Popups, explosions, laser, lightning, screen shake, level banner
+js/Difficulty.js    Levels, fall speed, junk, and special-block odds
 js/AudioManager.js  Sound effects (Web Audio) and the music playlist
 js/Hud.js           Score strip and the music / sound FX buttons
 js/Renderer.js      All canvas drawing; reads game state, never changes it

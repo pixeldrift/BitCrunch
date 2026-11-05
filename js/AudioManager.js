@@ -100,11 +100,11 @@ class AudioManager {
     static THEME = { file: "audio/music/music-a.mp3", lufs: -13.3 };
 
     static MUSIC = [
-        { file: "audio/music/music-b.mp3", lufs: -9.2 },
-        { file: "audio/music/music-c.mp3", lufs: -10.2 },
-        { file: "audio/music/music-d.mp3", lufs: -10.5 },
-        { file: "audio/music/music-e.mp3", lufs: -15.2 },
-        { file: "audio/music/music-f.mp3", lufs: -8.0 },
+        { file: "audio/music/music-b.mp3", lufs: -9.7 },
+        { file: "audio/music/music-c.mp3", lufs: -10.8 },
+        { file: "audio/music/music-d.mp3", lufs: -11.0 },
+        { file: "audio/music/music-e.mp3", lufs: -15.7 },
+        { file: "audio/music/music-f.mp3", lufs: -8.4 },
     ];
 
     // The level every track is matched to. This is track b at volume 0.2,

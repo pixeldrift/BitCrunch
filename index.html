@@ -2,14 +2,33 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, user-scalable=no">
+    <meta name="theme-color" content="#333333">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="BitCrunch">
+    <link rel="manifest" href="manifest.webmanifest">
+    <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
     <title>BitCrunch Game</title>
 
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Silkscreen:wght@400;700&display=swap" rel="stylesheet">
+    <!-- Fonts are self-hosted (see fonts/README.md) -->
+    <link rel="preload" href="fonts/silkscreen-400.woff2" as="font" type="font/woff2" crossorigin>
 
     <style>
+
+    @font-face {
+        font-family: "Silkscreen";
+        font-weight: 400;
+        font-display: swap;
+        src: url("fonts/silkscreen-400.woff2") format("woff2");
+    }
+    @font-face {
+        font-family: "Silkscreen";
+        font-weight: 700;
+        font-display: swap;
+        src: url("fonts/silkscreen-700.woff2") format("woff2");
+    }
 
     #debugLog {
         display: none;
@@ -195,6 +214,11 @@
     <script>
 
         const canvas = document.getElementById("gameCanvas");
+
+        // Save the game for offline play and faster loading (needs http/https, not file://)
+        if ("serviceWorker" in navigator && location.protocol.startsWith("http")) {
+            window.addEventListener("load", () => navigator.serviceWorker.register("sw.js").catch(() => {}));
+        }
 
         function adjustCanvasSize() {
             let isMobile = window.innerWidth < 768;

@@ -14,14 +14,13 @@ const Config = Object.freeze({
     // of the grid); the Renderer shifts the grid down by HUD_HEIGHT.
     GRID_WIDTH: 400,
     GRID_HEIGHT: 720,
-    HUD_HEIGHT: 70,
+    HUD_HEIGHT: 84,
     BLOCK_WIDTH: 100,
     BLOCK_HEIGHT: 60,
     COLUMNS: 4,
     ROWS: 12,
 
     // Timing and speeds
-    GRAVITY_SPEED: 60,           // Pixels per second the active block falls on its own
     DROP_SPEED: 2000,            // Pixels per second when the player drops a block
     MERGE_DELAY: 200,            // ms between landing and merging
     GRAVITY_DELAY: 100,          // ms before gravity / chain merges run
@@ -34,6 +33,20 @@ const Config = Object.freeze({
     // Floating score popups (per 1/60 s, so they look the same at any frame rate)
     SCORE_POPUP_RISE_SPEED: 2,   // Pixels
     SCORE_POPUP_FADE_SPEED: 1,   // Percent alpha
+
+    // Difficulty: the game gets harder every few blocks (see Difficulty.js)
+    BLOCKS_PER_LEVEL: 10,        // A new level every this many blocks placed
+    BASE_FALL_SPEED: 60,         // Pixels per second at level 1 (12 s to cross the grid)
+    FALL_SPEED_GROWTH: 1.12,     // Each level multiplies the speed by this...
+    MAX_FALL_SPEED: 480,         // ...up to this (1.5 s to cross the grid)
+    MIN_MERGE_DELAY: 60,         // The pause after landing shrinks to this
+    MERGE_DELAY_STEP: 10,        // ...by this many ms per level
+    JUNK_START_LEVEL: 4,         // Junk blocks start rising from this level
+    JUNK_START_INTERVAL: 18,     // Blocks between junk at the first junk level
+    JUNK_INTERVAL_STEP: 1,       // ...fewer each level
+    JUNK_MIN_INTERVAL: 10,        // ...but never faster than this
+    JUNK_COUNT_STEP: 8,          // One more junk block per row of junk every this many levels (max 3)
+    LEVEL_BANNER_TIME: 1.6,      // Seconds the "LEVEL n" banner shows
 
     // Spawning
     SPECIAL_BLOCK_CHANCE: 10,    // Percent chance a new block is a special

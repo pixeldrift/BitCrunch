@@ -51,8 +51,13 @@ function checkBoard(game) {
 
 // Play until the game ends or maxBlocks have been placed.
 // Returns { blocks, level, score, over, problems }
-function playGame({ seed = 1, maxBlocks = 200, strategy = "sensible", check = true, setup = null } = {}) {
-    const world = createWorld(seed);
+// reaction: seconds the bot needs to look at the board and decide (null = instant).
+// Moving one column takes MOVE_TIME. If the block lands before the bot is done, it
+// lands wherever it got to; this is how falling speed puts a player under pressure.
+const MOVE_TIME = 0.12;
+
+function playGame({ seed = 1, maxBlocks = 200, strategy = "sensible", check = true, setup = null, reaction = null, config = {} } = {}) {
+    const world = createWorld(seed, config);
     const game = world.startPlaying();
     if (setup) setup(game, world);
 
@@ -83,10 +88,20 @@ function playGame({ seed = 1, maxBlocks = 200, strategy = "sensible", check = tr
 
         const block = game.activeBlock;
         last = block;
-        const column = pick(game, rng);
-        let guard = 0;
-        while (game.activeBlock === block && game.activeBlock.x !== column * 100 && guard++ < 4) {
+        let column = pick(game, rng);
+
+        // How many columns can the bot move before the block lands?
+        let maxSteps = 4;
+        if (reaction !== null) {
+            const speed = world.run(`Difficulty.fallSpeed(${game.level})`);
+            const timeLeft = (game.board.landingY(block.x, block.y) - block.y) / speed;
+            maxSteps = Math.max(0, Math.floor((timeLeft - reaction) / MOVE_TIME));
+        }
+
+        let steps = 0;
+        while (game.activeBlock === block && game.activeBlock.x !== column * 100 && steps < maxSteps) {
             if (game.activeBlock.x < column * 100) game.moveRight(); else game.moveLeft();
+            steps++;
         }
 
         game.drop();

@@ -45,7 +45,9 @@ class NumberBlockType extends BlockType {
 
 // Doesn't merge. Only other specials can remove it.
 class BugBlockType extends BlockType {
-    constructor() { super("Bug", 500, 300, { special: true }); }
+    constructor(name = "Bug", spriteX = 500, spriteY = 300, special = true) {
+        super(name, spriteX, spriteY, { special });
+    }
 
     land(game, block, done) {
         const below = game.board.blockBelow(block);
@@ -271,10 +273,10 @@ class NukeBlockType extends BlockType {
 class BlasterBlockType extends BlockType {
     constructor() { super("Blaster", 500, 600, { special: true }); }
 
-    // Landing (it eventually falls on its own): it just disappears
+    // Landing (it eventually falls on its own): it explodes, and anything that
+    // was resting on it falls into the gap before the next block appears
     land(game, block, done) {
-        game.explodeBlock(block);
-        return done?.();
+        game.explodeBlock(block, () => game.applyGravity(done));
     }
 
     // The drop command fires the laser instead of dropping the block
@@ -283,6 +285,19 @@ class BlasterBlockType extends BlockType {
         return true;
     }
 } // class BlasterBlockType
+
+
+// Junk that rises from the bottom as the game goes on. Like a Bug it never
+// merges, and only specials can clear it. (It is a kind of Bug, so a Wild
+// landing on it removes both.)
+class JunkBlockType extends BugBlockType {
+    constructor() { super("Junk", 400, 600, false); }
+
+    // Junk is placed directly, never "lands"
+    land(game, block, done) {
+        done?.();
+    }
+} // class JunkBlockType
 
 
 // Plain colored blocks used for screen fills and flicker effects
@@ -308,14 +323,14 @@ const BlockCatalog = (() => {
 
     const scenery = [
         new ScenerySpriteType("Orange", 540),
-        new ScenerySpriteType("Peach", 600),
         new ScenerySpriteType("Teal", 660),
     ];
+    const junk = new JunkBlockType();
 
-    const all = [...numbers, ...specials, ...scenery];
+    const all = [...numbers, ...specials, junk, ...scenery];
 
     return Object.freeze({
-        numbers, specials, scenery, all,
+        numbers, specials, scenery, junk, all,
         byName: name => all.find(t => t.name === name) || null,
         byValue: value => numbers.find(t => t.value === value) || null,
     });
@@ -333,7 +348,7 @@ class BlockSpawner {
         this.board = board;
     }
 
-    nextType() {
+    nextType(level = 1) {
         const maxValue = this.board.maxValue();
 
         const weights = { 1: 50, 2: 30, 4: 15, 8: 5 };
@@ -347,7 +362,14 @@ class BlockSpawner {
         if (roll < Config.SPECIAL_BLOCK_CHANCE) {
             const enabled = BlockCatalog.specials.filter(t => t.enabled);
             if (enabled.length > 0) {
-                return enabled[Math.floor(Math.random() * enabled.length)];
+                // Weighted: helpful specials get rarer and Bugs commoner with level
+                const weights = enabled.map(t => Difficulty.specialWeight(t.name, level));
+                let pick = Math.random() * weights.reduce((a, b) => a + b, 0);
+                for (let i = 0; i < enabled.length; i++) {
+                    pick -= weights[i];
+                    if (pick < 0) return enabled[i];
+                }
+                return enabled[enabled.length - 1];
             }
         }
 

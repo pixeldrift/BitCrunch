@@ -14,7 +14,7 @@ class Hud {
             music: { x: 0, y: 0, width: 50, height: h },
             sfx: { x: Config.GRID_WIDTH - 50, y: 0, width: 50, height: h },
         };
-        this.scorebarY = 14;
+        this.scorebarY = 8;
     }
 
     // Which button is under a canvas point (not grid point)? null if none.
@@ -59,5 +59,18 @@ class Hud {
         ctx.globalAlpha = game.audio.sfxOn ? 1 : 0.3;
         ctx.fillText("♫", this.buttons.sfx.x + this.buttons.sfx.width / 2, textY);
         ctx.globalAlpha = 1;
+
+        // Second row: the level, and a warning when junk is on its way
+        ctx.font = "16px Silkscreen";
+        ctx.textAlign = "left";
+        ctx.fillStyle = "#f16d01";
+        ctx.fillText(`LEVEL ${game.level}`, 56, h - 8);
+
+        const junk = game.junkCountdown;
+        if (junk !== null) {
+            ctx.textAlign = "right";
+            ctx.fillStyle = junk <= 2 ? "#ff5a3c" : "#f16d01"; // Turns red when it's close
+            ctx.fillText(`JUNK IN ${junk}`, 344, h - 8);
+        }
     }
 } // class Hud

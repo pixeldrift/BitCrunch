@@ -67,7 +67,8 @@ function seededRandom(seed) {
     };
 }
 
-function createWorld(seed = 1) {
+// `config` overrides Config values for this world, e.g. { JUNK_START_LEVEL: 4 }
+function createWorld(seed = 1, config = {}) {
     const clock = new FakeClock();
     const sandbox = {
         console: { log() {}, warn: console.warn, error: console.error },
@@ -89,7 +90,16 @@ function createWorld(seed = 1) {
 
     LOGIC_FILES.forEach(name => {
         const file = path.join(JS_DIR, name + ".js");
-        if (fs.existsSync(file)) vm.runInContext(fs.readFileSync(file, "utf8"), ctx, { filename: file });
+        if (!fs.existsSync(file)) return;
+        let code = fs.readFileSync(file, "utf8");
+        if (name === "Config") {
+            for (const [key, value] of Object.entries(config)) {
+                const pattern = new RegExp(`(\\b${key}:\\s*)[^,\\n]+,`);
+                if (!pattern.test(code)) throw new Error("Unknown Config key: " + key);
+                code = code.replace(pattern, `$1${JSON.stringify(value)},`);
+            }
+        }
+        vm.runInContext(code, ctx, { filename: file });
     });
     world.seed(seed);
 

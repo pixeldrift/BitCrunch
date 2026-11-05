@@ -174,6 +174,20 @@ class Board {
     }
 
 
+    // Slide a whole column up one row and put a block in the freed bottom cell.
+    // The column's top cell must be empty (check first).
+    pushUp(column, block) {
+        const c = this.cells[column];
+        for (let r = 0; r < Config.ROWS - 1; r++) {
+            c[r] = c[r + 1];
+            if (c[r] !== null) c[r].y = r * Config.BLOCK_HEIGHT;
+        }
+        block.x = column * Config.BLOCK_WIDTH;
+        block.y = (Config.ROWS - 1) * Config.BLOCK_HEIGHT;
+        c[Config.ROWS - 1] = block;
+    }
+
+
     // ----- Gravity -----
 
     // Drop every block as far as it can fall. Returns the blocks that moved, in

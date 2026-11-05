@@ -208,7 +208,7 @@ class Renderer {
 
     // Everything the HUD shows, as a string. When it changes, the HUD needs redrawing.
     currentHudKey(game) {
-        return `${game.score}|${game.level}|${game.audio.musicOn}|${game.audio.sfxOn}|${game.options.drawScorebar}`;
+        return `${game.score}|${game.level}|${game.junkCountdown}|${game.audio.musicOn}|${game.audio.sfxOn}|${game.options.drawScorebar}`;
     } // currentHudKey
 
 
@@ -365,8 +365,27 @@ class Renderer {
         }
 
         if (game.options.showScorePopups) this.drawPopups(effects.popups);
+        if (effects.banner) this.drawBanner(effects.banner);
         if (game.options.drawRowNumbers) this.drawRowNumbers();
     } // drawPlayingScreen
+
+
+    // "LEVEL 5", big in the middle of the grid, fading out
+    drawBanner(banner) {
+        const ctx = this.ctx;
+        const fadeTime = 0.5;
+        const remaining = Config.LEVEL_BANNER_TIME - banner.age;
+
+        ctx.globalAlpha = Math.max(0, Math.min(1, remaining / fadeTime));
+        ctx.font = "48px Silkscreen";
+        ctx.textAlign = "center";
+        ctx.lineWidth = 8;
+        ctx.strokeStyle = "#682f00";
+        ctx.fillStyle = "#f16d01";
+        ctx.strokeText(banner.text, 200, 300);
+        ctx.fillText(banner.text, 200, 300);
+        ctx.globalAlpha = 1;
+    } // drawBanner
 
 
     // The beam, with its glow. `length` is how far down it reaches.

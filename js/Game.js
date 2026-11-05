@@ -58,6 +58,8 @@ class Game {
 
         this.state = GameState.WELCOME;
         this.score = 0;
+        this.blocksPlaced = 0;       // Blocks landed this game; drives the level
+        this.blocksSinceJunk = 0;
         this.countdownValue = 3;
         this.activeBlock = null;     // The falling block
         this.dropping = false;       // Player dropped the block and it's on its way down
@@ -94,6 +96,14 @@ class Game {
     get isGameOver() { return this.state === GameState.GAME_OVER; }
     get isRunning() { return this.isPlaying || this.isPaused; } // A game is in progress
 
+    get level() { return Difficulty.levelFor(this.blocksPlaced); }
+
+    // Blocks until the next junk arrives, or null if there's no junk at this level
+    get junkCountdown() {
+        const interval = Difficulty.junkInterval(this.level);
+        return interval === null ? null : Math.max(1, interval - this.blocksSinceJunk);
+    }
+
     // Clear everything and start a fresh game
     resetGame() {
         this.stopLoop();
@@ -101,6 +111,8 @@ class Game {
         this.renderer.cancelOverlay();
 
         this.score = 0;
+        this.blocksPlaced = 0;
+        this.blocksSinceJunk = 0;
         this.board.clear();
         this.effects.reset();
         this.activeBlock = null;
@@ -297,7 +309,7 @@ class Game {
         const block = this.activeBlock;
         if (!block) return;
 
-        const speed = this.dropping ? Config.DROP_SPEED : Config.GRAVITY_SPEED;
+        const speed = this.dropping ? Config.DROP_SPEED : Difficulty.fallSpeed(this.level);
         const nextY = block.y + speed * dt;
         const limit = this.board.landingY(block.x, block.y);
 
@@ -317,7 +329,7 @@ class Game {
     createBlock() {
         if (this.activeBlock || this.swapInProgress) return;
 
-        const type = this.spawner.nextType();
+        const type = this.spawner.nextType(this.level);
         const x = Math.floor(Math.random() * Config.COLUMNS) * Config.BLOCK_WIDTH;
 
         // The stack reached the top
@@ -340,16 +352,59 @@ class Game {
         this.awardPoints(block);
         this.audio.play("place");
 
+        const levelBefore = this.level;
+        this.blocksPlaced++;
+        this.blocksSinceJunk++;
+        if (this.level > levelBefore) this.levelUp();
+
         // Pause briefly so the player sees it land, then merge
         this.resolvingSince = performance.now();
-        this.after(Config.MERGE_DELAY, () => {
+        this.after(Difficulty.mergeDelay(this.level), () => {
             this.mergeBlocks(block, () => {
                 this.dropping = false;
                 this.resolvingSince = null;
+                if (this.activeBlock || !this.isRunning) return;
+
+                this.addJunkIfDue();
                 if (!this.activeBlock && this.isRunning) this.createBlock();
             });
         });
     } // landActiveBlock
+
+
+    levelUp() {
+        this.audio.play("success");
+        this.effects.showBanner(`LEVEL ${this.level}`);
+    } // levelUp
+
+
+    // Every so often, push junk up from the bottom of a few columns
+    addJunkIfDue() {
+        const interval = Difficulty.junkInterval(this.level);
+        if (interval === null || this.blocksSinceJunk < interval) return;
+        this.blocksSinceJunk = 0;
+
+        // Columns with room for another block
+        const columns = [0, 1, 2, 3].filter(c => this.board.cells[c][0] === null);
+        if (columns.length === 0) {
+            this.endGame(); // Every column is full to the top
+            return;
+        }
+
+        // Choose some of them at random
+        for (let i = columns.length - 1; i > 0; i--) {
+            const j = Math.floor(Math.random() * (i + 1));
+            [columns[i], columns[j]] = [columns[j], columns[i]];
+        }
+        const count = Math.min(Difficulty.junkCount(this.level), columns.length);
+
+        for (const c of columns.slice(0, count)) {
+            this.board.pushUp(c, new Block(c * Config.BLOCK_WIDTH, 0, BlockCatalog.junk));
+        }
+
+        this.audio.play("bug");
+        this.shake(250, 3);
+    } // addJunkIfDue
 
 
     moveLeft() { this.moveActiveBlock(-1); }

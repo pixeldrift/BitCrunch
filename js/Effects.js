@@ -18,6 +18,7 @@ class Effects {
         this.laser = null;    // { x } while the beam is visible
         this.lightning = null;// { centerX, rowY, blocks:[{x,y}] } while flashing
         this.shake = null;    // { endTime, intensity }
+        this.banner = null;   // { text, age } e.g. "LEVEL 3"
     }
 
     addPopup(x, y, amount) {
@@ -39,8 +40,17 @@ class Effects {
         return { x: (Math.random() - 0.5) * range, y: (Math.random() - 0.5) * range };
     }
 
+    showBanner(text) {
+        this.banner = { text, age: 0 };
+    }
+
     // Advance animations. dt is in seconds; speeds are tuned per 1/60 s.
     update(dt) {
+        if (this.banner) {
+            this.banner.age += dt;
+            if (this.banner.age >= Config.LEVEL_BANNER_TIME) this.banner = null;
+        }
+
         const frames = dt * 60;
         for (let i = this.popups.length - 1; i >= 0; i--) {
             const popup = this.popups[i];

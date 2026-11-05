@@ -27,6 +27,7 @@ const Config = Object.freeze({
     GRAVITY_DELAY: 100,          // ms before gravity / chain merges run
     COUNTDOWN_STEP: 1000,        // ms each countdown number is on screen
     SPAWN_CHECK_INTERVAL: 1000,  // ms between safety-net checks for a missing block
+    RESOLVE_TIMEOUT: 8000,       // ms a landing may take to resolve before the next block is forced
     LASER_DURATION: 100,         // ms the blaster beam is visible
     EXPLOSION_FRAME_DURATION: 80,// ms per explosion frame
 

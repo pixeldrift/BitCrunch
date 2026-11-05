@@ -69,9 +69,18 @@ class Game {
         this.drawRequested = false;
         this.laserTimer = null;
 
-        // Safety net: if no block is falling while we're playing, make one
+        // A landed block is "resolving" while it merges and things settle; the next
+        // block waits for that to finish
+        this.resolvingSince = null;
+
+        // Safety net: if no block has appeared for a long time (something got
+        // stuck), make one. It must not fire during normal merges, or the next
+        // block would appear while the last one is still merging.
         this.spawnWatchdog = setInterval(() => {
-            if (this.state === GameState.PLAYING && !this.activeBlock) this.createBlock();
+            if (this.state !== GameState.PLAYING || this.activeBlock || this.swapInProgress) return;
+            const stuck = this.resolvingSince !== null &&
+                performance.now() - this.resolvingSince > Config.RESOLVE_TIMEOUT;
+            if (this.resolvingSince === null || stuck) this.createBlock();
         }, Config.SPAWN_CHECK_INTERVAL);
     } // constructor
 
@@ -97,6 +106,7 @@ class Game {
         this.activeBlock = null;
         this.dropping = false;
         this.swapInProgress = false;
+        this.resolvingSince = null;
         this.countdownValue = 3;
 
         this.audio.stopTheme();
@@ -331,9 +341,11 @@ class Game {
         this.audio.play("place");
 
         // Pause briefly so the player sees it land, then merge
+        this.resolvingSince = performance.now();
         this.after(Config.MERGE_DELAY, () => {
             this.mergeBlocks(block, () => {
                 this.dropping = false;
+                this.resolvingSince = null;
                 if (!this.activeBlock && this.isRunning) this.createBlock();
             });
         });
@@ -431,43 +443,31 @@ class Game {
 
     // Let every block fall into empty space below it
     applyGravity(callback = null) {
-        let falling = 0;
+        const fallen = this.board.settle();
+        let pending = fallen.length;
 
-        for (let column = 0; column < Config.COLUMNS; column++) {
-            const x = column * Config.BLOCK_WIDTH;
-
-            for (const block of this.board.column(x)) {
-                let targetY = block.y;
-                let nextY = block.y + Config.BLOCK_HEIGHT;
-
-                while (nextY < Config.GRID_HEIGHT && !this.board.blockAt(x, nextY)) {
-                    targetY = nextY;
-                    nextY += Config.BLOCK_HEIGHT;
-                }
-
-                if (targetY === block.y) continue;
-
-                falling++;
-                block.y = targetY;
-
-                // After falling, it may merge with what it landed on
-                this.after(Config.GRAVITY_DELAY, () => {
-                    this.mergeBlocks(block, () => {
-                        falling--;
-                        if (falling === 0 && callback) callback();
-                    });
+        // After falling, each may merge with what it landed on
+        fallen.forEach(block => {
+            this.after(Config.GRAVITY_DELAY, () => {
+                this.mergeBlocks(block, () => {
+                    pending--;
+                    if (pending === 0 && callback) callback();
                 });
-            }
-        }
+            });
+        });
 
         // Nothing fell, so we're already done
-        if (falling === 0 && callback) callback();
+        if (pending === 0 && callback) callback();
     } // applyGravity
 
 
     // Let a settled block do its thing (specials) or merge with the block below
     mergeBlocks(block, callback = null) {
         if (!block) return;
+
+        // It may have been merged away or destroyed while waiting its turn
+        if (!this.board.has(block)) return callback?.();
+
         block.type.land(this, block, callback);
     } // mergeBlocks
 
@@ -487,7 +487,7 @@ class Game {
         const upgradedType = BlockCatalog.byValue(upgradedValue);
 
         this.removeBlock(below);
-        block.y += Config.BLOCK_HEIGHT;
+        this.board.move(block, block.y + Config.BLOCK_HEIGHT);
 
         if (upgradedType) {
             block.type = upgradedType;
@@ -624,8 +624,8 @@ class Game {
         const movingLower = new Block(lower.x, lower.y, lower.type);
         this.board.remove(upper);
         this.board.remove(lower);
-        this.board.add(movingUpper);
-        this.board.add(movingLower);
+        this.board.addFloating(movingUpper);
+        this.board.addFloating(movingLower);
 
         const startTime = performance.now();
 
@@ -650,6 +650,8 @@ class Game {
             movingLower.x = lower.x;
             movingUpper.y = lower.y;
             movingLower.y = upper.y;
+            this.board.place(movingUpper);
+            this.board.place(movingLower);
 
             // Short pause, then settle and merge
             this.after(300, () => {

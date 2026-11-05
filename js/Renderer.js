@@ -299,10 +299,10 @@ class Renderer {
         this.drawGridBackground();
 
         // Settled blocks (the ones exploding are drawn by their explosion)
-        for (const block of game.board.blocks) {
-            if (block.exploding) continue;
+        game.board.each(block => {
+            if (block.exploding) return;
             this.drawSprite(block.type.sprite, block.x, block.y, BLOCK_WIDTH, BLOCK_HEIGHT);
-        }
+        });
 
         // Where the active block would land
         const ghostY = active ? game.board.ghostY(active.x) : null;

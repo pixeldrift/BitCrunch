@@ -20,11 +20,14 @@ class FakeClock {
         this.frame = 1000 / 60;
     }
 
-    schedule(fn, delay, every = 0) {
-        const entry = { at: this.now + delay, seq: ++this.seq, fn, every };
+    schedule(fn, delay, every = 0, raf = false) {
+        const entry = { at: this.now + delay, seq: ++this.seq, fn, every, raf };
         this.queue.push(entry);
         return entry.seq;
     }
+
+    // One-shot timers still waiting (not the repeating watchdog, not animation frames)
+    pendingTimeouts() { return this.queue.filter(e => !e.every && !e.raf).length; }
 
     cancel(id) { this.queue = this.queue.filter(e => e.seq !== id); }
 
@@ -72,7 +75,7 @@ function createWorld(seed = 1) {
         setInterval: (fn, ms) => clock.schedule(fn, ms, ms),
         clearTimeout: id => clock.cancel(id),
         clearInterval: id => clock.cancel(id),
-        requestAnimationFrame: fn => clock.schedule(fn, clock.nextFrame() - clock.now),
+        requestAnimationFrame: fn => clock.schedule(fn, clock.nextFrame() - clock.now, 0, true),
         cancelAnimationFrame: id => clock.cancel(id),
         performance: { now: () => clock.now },
     };

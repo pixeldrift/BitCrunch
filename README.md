@@ -25,6 +25,7 @@ T			Next Music Track
 M			Toggle Music
 F			Toggle Sound FX
 G			Toggle Ghost
+H  ?		How to Play (from the title, pause, or game-over screen)
 X  Q		End Game
 ```
 
@@ -39,6 +40,8 @@ Swipe up			Pause
 Tap					Nudge left or right, start, or resume
 ♪ ♫ icons			Tap to toggle music / sound FX
 ```
+
+The title, pause, and game-over screens all have a **HOW TO PLAY** button, with the controls and what every special block does.
 
 ## Specials
 
@@ -221,6 +224,7 @@ js/BlockTypes.js    One class per kind of block (numbers and each special), the
 js/Board.js         The settled blocks as a 4x12 grid, plus gravity (pure data)
 js/Effects.js       Popups, explosions, laser, lightning, screen shake, level banner
 js/Difficulty.js    Levels, fall speed, junk, and special-block odds
+js/HelpContent.js   The text of the HOW TO PLAY screens
 js/AudioManager.js  Sound effects (Web Audio) and the music playlist
 js/Hud.js           Score strip and the music / sound FX buttons
 js/Renderer.js      All canvas drawing; reads game state, never changes it

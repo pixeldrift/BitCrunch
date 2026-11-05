@@ -194,6 +194,7 @@ class Renderer {
             case GameState.WELCOME:   this.drawWelcomeScreen(game); break;
             case GameState.COUNTDOWN: this.drawCountdownScreen(game); break;
             case GameState.PLAYING:   this.drawPlayingScreen(game); break;
+            case GameState.HELP:      this.drawHelpScreen(game); break;
         }
 
         ctx.restore(); // Shake and grid offset
@@ -292,10 +293,12 @@ class Renderer {
             this.drawSprite(sprite, b.x, b.y, b.width, b.height);
         });
 
+        this.drawHelpButton(Config.HELP_BUTTONS.welcome);
+
         ctx.fillStyle = "white";
         ctx.font = "24px Silkscreen";
         ctx.textAlign = "center";
-        ctx.fillText(Config.VERSION, 200, 640);
+        ctx.fillText(Config.VERSION, 200, 698);
     } // drawWelcomeScreen
 
 
@@ -485,7 +488,8 @@ class Renderer {
     } // cancelOverlay
 
 
-    // Fill the grid with one block type, bottom row first, one block per `speed` ms
+    // Fill the grid with one block type, bottom row first, one block per `speed` ms.
+    // A speed of 0 fills it all at once.
     fillGrid(blockType, speed, callback = null) {
         this.cancelOverlay();
 
@@ -508,16 +512,17 @@ class Renderer {
                 y -= BLOCK_HEIGHT;
             }
 
-            this.overlayTimer = setTimeout(drawNext, speed);
+            if (speed > 0) this.overlayTimer = setTimeout(drawNext, speed);
+            else drawNext();
         };
         drawNext();
     } // fillGrid
 
 
-    showPause(game) {
+    showPause(game, animate = true) {
         const ctx = this.ctx;
 
-        this.fillGrid(BlockCatalog.byName("Teal"), 5, () => {
+        this.fillGrid(BlockCatalog.byName("Teal"), animate ? 5 : 0, () => {
             ctx.fillStyle = "#f16d01";
             ctx.font = "60px Silkscreen";
             ctx.textAlign = "center";
@@ -528,11 +533,13 @@ class Renderer {
                 ctx.strokeText("PAUSED", 200, 380);
                 ctx.fillText("PAUSED", 200, 380);
             });
+
+            this.drawHelpButton(Config.HELP_BUTTONS.paused);
         });
     } // showPause
 
 
-    showScoreboard(game) {
+    showScoreboard(game, animate = true) {
         const ctx = this.ctx;
 
         // Clean slate
@@ -542,7 +549,7 @@ class Renderer {
             this.drawGridBackground();
         });
 
-        this.fillGrid(BlockCatalog.byName("Orange"), 20, () => {
+        this.fillGrid(BlockCatalog.byName("Orange"), animate ? 20 : 0, () => {
             this.withDropShadow(() => {
                 const board = Sprites.scoreBoard;
                 this.drawSprite(board, 50, 150, 300, 240);
@@ -553,6 +560,187 @@ class Renderer {
             ctx.textAlign = "center";
             ctx.fillText(game.score, 200, 290);
             ctx.fillText(game.highScore, 200, 366);
+
+            this.drawHelpButton(Config.HELP_BUTTONS.gameOver);
         });
     } // showScoreboard
+
+
+    // ====================
+    // Help screen
+    // ====================
+
+    // The "HOW TO PLAY" button (in grid space)
+    drawHelpButton(rect) {
+        const ctx = this.ctx;
+        this.withDropShadow(() => {
+            this.drawSprite(BlockCatalog.byName("Teal").sprite, rect.x, rect.y, rect.width, rect.height);
+        });
+
+        ctx.font = "20px Silkscreen";
+        ctx.textAlign = "center";
+        ctx.lineWidth = 4;
+        ctx.strokeStyle = "#682f00";
+        ctx.fillStyle = "#f16d01";
+        ctx.strokeText("HOW TO PLAY", rect.x + rect.width / 2, rect.y + rect.height / 2 + 7);
+        ctx.fillText("HOW TO PLAY", rect.x + rect.width / 2, rect.y + rect.height / 2 + 7);
+    } // drawHelpButton
+
+
+    // Is a canvas point on this screen's "HOW TO PLAY" button?
+    helpButtonAt(game, point) {
+        const rect = Config.HELP_BUTTONS[game.state];
+        if (!rect) return false;
+        const y = point.y - Config.HUD_HEIGHT; // Canvas -> grid space
+        return point.x >= rect.x && point.x <= rect.x + rect.width &&
+               y >= rect.y && y <= rect.y + rect.height;
+    } // helpButtonAt
+
+
+    // What was tapped on the help screen? "close", "back" or "next"
+    helpTargetAt(point) {
+        const c = Config.HELP_CLOSE;
+        const y = point.y - Config.HUD_HEIGHT;
+        if (point.x >= c.x && point.x <= c.x + c.width && y >= c.y && y <= c.y + c.height) return "close";
+        return point.x < Config.GRID_WIDTH / 2 ? "back" : "next";
+    } // helpTargetAt
+
+
+    // Break text into lines no wider than maxWidth (using the current font)
+    wrapText(text, maxWidth) {
+        const lines = [];
+        let line = "";
+        for (const word of text.split(" ")) {
+            const attempt = line ? line + " " + word : word;
+            if (line && this.ctx.measureText(attempt).width > maxWidth) {
+                lines.push(line);
+                line = word;
+            } else {
+                line = attempt;
+            }
+        }
+        if (line) lines.push(line);
+        return lines;
+    } // wrapText
+
+
+    drawHelpScreen(game) {
+        const ctx = this.ctx;
+        const W = Config.GRID_WIDTH, H = Config.GRID_HEIGHT;
+        const pages = HelpContent.pages;
+        const page = pages[game.helpPage];
+        const MARGIN = 24;
+
+        // Dim the grid so the text reads clearly
+        this.drawGridBackground();
+        ctx.fillStyle = "rgba(6, 20, 28, 0.9)";
+        ctx.fillRect(0, 0, W, H);
+
+        // Title
+        ctx.textAlign = "center";
+        ctx.font = "28px Silkscreen";
+        ctx.lineWidth = 6;
+        ctx.strokeStyle = "#682f00";
+        ctx.fillStyle = "#f16d01";
+        ctx.strokeText(page.title, W / 2 - 14, 50);
+        ctx.fillText(page.title, W / 2 - 14, 50);
+
+        // Close button: an X
+        const c = Config.HELP_CLOSE;
+        const cx = c.x + c.width / 2, cy = c.y + c.height / 2;
+        ctx.lineWidth = 5;
+        ctx.lineCap = "round";
+        ctx.strokeStyle = "#f16d01";
+        ctx.beginPath();
+        ctx.moveTo(cx - 9, cy - 9); ctx.lineTo(cx + 9, cy + 9);
+        ctx.moveTo(cx + 9, cy - 9); ctx.lineTo(cx - 9, cy + 9);
+        ctx.stroke();
+        ctx.lineCap = "butt";
+
+        // Body
+        let y = 92;
+        for (const item of page.items) y = this.drawHelpItem(item, y, MARGIN, W - MARGIN * 2);
+
+        // Footer: page dots, and what the taps do
+        const dotSize = 10, gap = 10;
+        const dotsWidth = pages.length * dotSize + (pages.length - 1) * gap;
+        pages.forEach((_, i) => {
+            ctx.fillStyle = i === game.helpPage ? "#f16d01" : "rgba(255, 255, 255, 0.25)";
+            ctx.fillRect(W / 2 - dotsWidth / 2 + i * (dotSize + gap), H - 40, dotSize, dotSize);
+        });
+
+        ctx.font = "14px Silkscreen";
+        ctx.fillStyle = "rgba(255, 255, 255, 0.7)";
+        ctx.textAlign = "left";
+        if (game.helpPage > 0) ctx.fillText("< BACK", MARGIN, H - 14);
+        ctx.textAlign = "right";
+        ctx.fillText(game.helpPage < pages.length - 1 ? "NEXT >" : "DONE >", W - MARGIN, H - 14);
+    } // drawHelpScreen
+
+
+    // Draw one piece of help content at height y. Returns the height where the next piece starts.
+    drawHelpItem(item, y, x, width) {
+        const ctx = this.ctx;
+        ctx.textAlign = "left";
+
+        switch (item.type) {
+            case "paragraph": {
+                ctx.font = "15px Silkscreen";
+                ctx.fillStyle = "#e8f1f2";
+                for (const line of this.wrapText(item.text, width)) {
+                    ctx.fillText(line, x, y + 14);
+                    y += 21;
+                }
+                return y + 12;
+            }
+
+            case "heading": {
+                ctx.font = "18px Silkscreen";
+                ctx.fillStyle = "#f16d01";
+                ctx.fillText(item.text, x, y + 16);
+                ctx.fillStyle = "rgba(241, 109, 1, 0.5)";
+                ctx.fillRect(x, y + 24, width, 2);
+                return y + 38;
+            }
+
+            case "rows": {
+                const keyWidth = 124;
+                ctx.font = "14px Silkscreen";
+                for (const [key, text] of item.rows) {
+                    const keyLines = this.wrapText(key, keyWidth);
+                    const textLines = this.wrapText(text, width - keyWidth - 10);
+                    ctx.fillStyle = "#f16d01";
+                    keyLines.forEach((l, i) => ctx.fillText(l, x, y + 13 + i * 19));
+                    ctx.fillStyle = "#e8f1f2";
+                    textLines.forEach((l, i) => ctx.fillText(l, x + keyWidth + 10, y + 13 + i * 19));
+                    y += Math.max(keyLines.length, textLines.length) * 19 + 11;
+                }
+                return y + 6;
+            }
+
+            case "block": {
+                const type = BlockCatalog.byName(item.name);
+                this.drawSprite(type.sprite, x, y, 63, 38);
+
+                ctx.font = "16px Silkscreen";
+                ctx.fillStyle = "#f16d01";
+                ctx.fillText(item.name.toUpperCase(), x + 78, y + 14);
+
+                ctx.font = "13px Silkscreen";
+                ctx.fillStyle = "#e8f1f2";
+                const lines = this.wrapText(item.text, width - 78);
+                lines.forEach((l, i) => ctx.fillText(l, x + 78, y + 32 + i * 17));
+                return y + Math.max(48, 26 + lines.length * 17 + 8);
+            }
+
+            case "numbers": {
+                const w = 36, h = 22, gap = 3;
+                const total = BlockCatalog.numbers.length * (w + gap) - gap;
+                BlockCatalog.numbers.forEach((t, i) =>
+                    this.drawSprite(t.sprite, x + (width - total) / 2 + i * (w + gap), y, w, h));
+                return y + h + 14;
+            }
+        }
+        return y;
+    } // drawHelpItem
 } // class Renderer

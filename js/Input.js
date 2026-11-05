@@ -25,6 +25,22 @@ class KeyboardController {
     onKeyDown(event) {
         const game = this.game;
 
+        // The help screen has its own keys
+        if (game.isHelp) {
+            switch (event.key) {
+                case "Escape": case "Enter": case " ": case "h": case "H": case "?": game.closeHelp(); break;
+                case "ArrowRight": case "d": case "D": game.helpGo(1); break;
+                case "ArrowLeft": case "a": case "A": game.helpGo(-1); break;
+            }
+            return;
+        }
+
+        // H opens the instructions (from the title, pause, or game-over screens)
+        if (event.key === "h" || event.key === "H" || event.key === "?") {
+            game.openHelp();
+            if (game.isHelp) return;
+        }
+
         // Any key on the scoreboard goes back to the welcome screen
         if (game.isGameOver) {
             game.returnToWelcome();
@@ -107,7 +123,11 @@ class MouseController {
             return;
         }
 
-        if (game.isGameOver) {
+        if (game.isHelp) {
+            this.onHelpTap(point);
+        } else if (this.renderer.helpButtonAt(game, point)) {
+            game.openHelp();
+        } else if (game.isGameOver) {
             game.resetGame();
         } else if (game.isPaused) {
             game.togglePause();
@@ -118,6 +138,14 @@ class MouseController {
             game.drop();
         }
     } // onClick
+
+    // A click or tap on the help screen: the X closes it; the left half goes back, the right half forward
+    onHelpTap(point) {
+        const target = this.renderer.helpTargetAt(point);
+        if (target === "close") this.game.closeHelp();
+        else if (target === "back") this.game.helpGo(-1);
+        else this.game.helpNext();
+    } // onHelpTap
 
     onMove(event) {
         const game = this.game;
@@ -270,7 +298,14 @@ class TouchController {
             return;
         }
 
-        if (game.isGameOver) {
+        if (game.isHelp) {
+            const target = this.renderer.helpTargetAt({ x, y });
+            if (target === "close") game.closeHelp();
+            else if (target === "back") game.helpGo(-1);
+            else game.helpNext();
+        } else if (this.renderer.helpButtonAt(game, { x, y })) {
+            game.openHelp();
+        } else if (game.isGameOver) {
             game.returnToWelcome();
         } else if (game.state === GameState.WELCOME) {
             game.resetGame();

@@ -11,6 +11,7 @@ const GameState = Object.freeze({
     PLAYING:   "playing",
     PAUSED:    "paused",
     GAME_OVER: "gameOver",
+    HELP:      "help",      // The instruction screen, opened from welcome / paused / game over
 });
 
 
@@ -64,6 +65,8 @@ class Game {
         this.activeBlock = null;     // The falling block
         this.dropping = false;       // Player dropped the block and it's on its way down
         this.swapInProgress = false; // A swap animation is running
+        this.helpReturn = GameState.WELCOME; // Where the help screen goes back to
+        this.helpPage = 0;
 
         this.timers = new Set();     // Every pending timeout/interval, so a reset can cancel them
         this.animationFrameId = null;
@@ -94,7 +97,12 @@ class Game {
     get isPlaying() { return this.state === GameState.PLAYING; }
     get isPaused() { return this.state === GameState.PAUSED; }
     get isGameOver() { return this.state === GameState.GAME_OVER; }
-    get isRunning() { return this.isPlaying || this.isPaused; } // A game is in progress
+    get isHelp() { return this.state === GameState.HELP; }
+
+    // A game is in progress (a paused game stays in progress while its help screen is open)
+    get isRunning() {
+        return this.isPlaying || this.isPaused || (this.isHelp && this.helpReturn === GameState.PAUSED);
+    }
 
     get level() { return Difficulty.levelFor(this.blocksPlaced); }
 
@@ -138,6 +146,55 @@ class Game {
     } // returnToWelcome
 
 
+    // ====================
+    // Help screen
+    // ====================
+
+    // Open the instructions. Only when nothing is falling: from the title screen,
+    // the pause screen, or the game-over screen.
+    openHelp() {
+        const allowed = [GameState.WELCOME, GameState.PAUSED, GameState.GAME_OVER];
+        if (!allowed.includes(this.state)) return;
+
+        this.helpReturn = this.state;
+        this.helpPage = 0;
+        this.state = GameState.HELP;
+        this.renderer.cancelOverlay();
+        this.draw();
+    } // openHelp
+
+
+    // Back to wherever the help screen was opened from
+    closeHelp() {
+        if (!this.isHelp) return;
+
+        this.state = this.helpReturn;
+        this.renderer.cancelOverlay();
+
+        // The pause and game-over screens are drawn once, so draw them again
+        if (this.state === GameState.PAUSED) this.renderer.showPause(this, false);
+        else if (this.state === GameState.GAME_OVER) this.renderer.showScoreboard(this, false);
+        else this.draw();
+    } // closeHelp
+
+
+    // Move through the pages (clamped, for the keyboard)
+    helpGo(direction) {
+        if (!this.isHelp) return;
+        const last = HelpContent.pages.length - 1;
+        this.helpPage = Math.max(0, Math.min(last, this.helpPage + direction));
+        this.draw();
+    } // helpGo
+
+
+    // Next page, and close after the last one (for tapping)
+    helpNext() {
+        if (!this.isHelp) return;
+        if (this.helpPage >= HelpContent.pages.length - 1) this.closeHelp();
+        else this.helpGo(1);
+    } // helpNext
+
+
     startCountdown() {
         this.audio.play("start");
         this.state = GameState.COUNTDOWN;
@@ -166,7 +223,7 @@ class Game {
 
 
     togglePause() {
-        if (!this.isRunning) return;
+        if (!this.isRunning || this.isHelp) return;
 
         if (this.isPlaying) {
             this.state = GameState.PAUSED;
@@ -290,12 +347,12 @@ class Game {
     // static, so they're never redrawn over.
     requestDraw() {
         if (this.animationFrameId !== null || this.drawRequested) return;
-        if (this.isPaused || this.isGameOver) return;
+        if (this.isPaused || this.isGameOver || this.isHelp) return;
 
         this.drawRequested = true;
         requestAnimationFrame(() => {
             this.drawRequested = false;
-            if (!this.isPaused && !this.isGameOver) this.draw();
+            if (!this.isPaused && !this.isGameOver && !this.isHelp) this.draw();
         });
     } // requestDraw
 

@@ -10,7 +10,7 @@ const fs = require("fs");
 const path = require("path");
 
 const JS_DIR = path.join(__dirname, "..", "js");
-const LOGIC_FILES = ["Config", "Block", "BlockTypes", "Board", "Effects", "Difficulty", "Game"];
+const LOGIC_FILES = ["Config", "Block", "BlockTypes", "Board", "Effects", "Difficulty", "HelpContent", "Game"];
 
 class FakeClock {
     constructor() {

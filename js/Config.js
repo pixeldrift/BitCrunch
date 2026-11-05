@@ -7,7 +7,7 @@
 // here depends on the DOM, so it ports directly to another platform.
 
 const Config = Object.freeze({
-    VERSION: "v0.04.0 (Beta)",
+    VERSION: "v0.04.1 (Beta)",
 
     // Layout. The canvas is a HUD strip on top of the playing grid, so the HUD
     // never covers blocks. Game logic uses grid coordinates (0,0 is the top-left
@@ -61,6 +61,17 @@ const Config = Object.freeze({
     MAX_PIXEL_RATIO: 2,          // Sharper on retina screens, capped for speed
 
     HIGH_SCORE_KEY: "bitCrunchHighScore",
+
+    // The "HOW TO PLAY" button on each screen that has one (grid coordinates),
+    // keyed by the game state it appears in
+    HELP_BUTTONS: Object.freeze({
+        welcome:  Object.freeze({ x: 100, y: 590, width: 200, height: 48 }),
+        paused:   Object.freeze({ x: 100, y: 440, width: 200, height: 48 }),
+        gameOver: Object.freeze({ x: 100, y: 420, width: 200, height: 48 }),
+    }),
+
+    // The close button (an X) at the top right of the help screen (grid coordinates)
+    HELP_CLOSE: Object.freeze({ x: 336, y: 14, width: 50, height: 44 }),
 
     // The Play button on the welcome screen (grid coordinates)
     PLAY_BUTTON: Object.freeze({ x: 50, y: 450, width: 300, height: 120 }),

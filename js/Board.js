@@ -17,11 +17,13 @@ class Board {
     constructor() {
         this.cells = Array.from({ length: Config.COLUMNS }, () => new Array(Config.ROWS).fill(null));
         this.floating = new Set();
+        this.version = 0; // Goes up whenever blocks are added, removed, or moved
     }
 
     clear() {
         this.cells.forEach(column => column.fill(null));
         this.floating.clear();
+        this.version++;
     }
 
 
@@ -43,6 +45,7 @@ class Board {
 
     // Put a block on the board: in its cell if it's on the grid, otherwise floating
     add(block) {
+        this.version++;
         const c = Board.columnOf(block.x), r = Board.rowOf(block.y);
         if (c >= 0 && r >= 0 && this.cells[c][r] === null) {
             this.cells[c][r] = block;
@@ -52,7 +55,7 @@ class Board {
     }
 
     // Add a block that is about to animate off the grid
-    addFloating(block) { this.floating.add(block); }
+    addFloating(block) { this.floating.add(block); this.version++; }
 
     // Settle a floating block into its cell
     place(block) {
@@ -62,11 +65,12 @@ class Board {
 
     // Returns true if the block was on the board
     remove(block) {
-        if (this.floating.delete(block)) return true;
+        if (this.floating.delete(block)) { this.version++; return true; }
 
         const c = Board.columnOf(block.x), r = Board.rowOf(block.y);
         if (c >= 0 && r >= 0 && this.cells[c][r] === block) {
             this.cells[c][r] = null;
+            this.version++;
             return true;
         }
         return false;
@@ -74,6 +78,7 @@ class Board {
 
     // Move a placed block to a new Y (it must stay in its column)
     move(block, y) {
+        this.version++;
         const c = Board.columnOf(block.x), r = Board.rowOf(block.y);
         if (c >= 0 && r >= 0 && this.cells[c][r] === block) this.cells[c][r] = null;
         block.y = y;
@@ -177,6 +182,7 @@ class Board {
     // Slide a whole column up one row and put a block in the freed bottom cell.
     // The column's top cell must be empty (check first).
     pushUp(column, block) {
+        this.version++;
         const c = this.cells[column];
         for (let r = 0; r < Config.ROWS - 1; r++) {
             c[r] = c[r + 1];
@@ -212,6 +218,7 @@ class Board {
             }
             moved.push(...fallen.reverse()); // Bottom-up -> top-down
         }
+        if (moved.length) this.version++;
         return moved;
     }
 } // class Board

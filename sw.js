@@ -6,7 +6,7 @@
 // you ship a change, so players get the new files. tests/assets.test.js checks
 // that this list matches index.html and that the version matches.
 
-const CACHE_VERSION = "0.04.3";
+const CACHE_VERSION = "0.04.4";
 const CACHE_NAME = "bitcrunch-" + CACHE_VERSION;
 
 // Everything needed to start and play, downloaded when the game is first opened

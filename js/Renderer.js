@@ -26,6 +26,8 @@ class Renderer {
         this.hud = new Hud();
         this.overlayTimer = null;   // Timer for the pause / game-over fill animation
         this.imageCache = new Map();// Pre-rendered glows and the scorebar, keyed by name
+        this.blockShadowLayer = null;   // Merged shadow of the settled blocks
+        this.blockShadowVersion = -1;   // Which board layout it was built for
         this.hudKey = null;         // What the HUD last drew, so it's only redrawn on change
 
         this.spriteSheet = new Image();
@@ -51,6 +53,7 @@ class Renderer {
         this.ghostImage();
         this.zapGlow();
         this.getScorebarImage();
+        this.singleBlockShadow();
     } // prepare
 
 
@@ -73,7 +76,7 @@ class Renderer {
 
             const g = image.getContext("2d");
             g.scale(this.scale, this.scale);
-            drawFn(g);
+            drawFn(g, this.scale);
             this.imageCache.set(key, image);
         }
         return image;
@@ -89,11 +92,11 @@ class Renderer {
     // Draw only the soft halo of a sprite's shape (not the sprite itself). A
     // shadow can't be drawn without its object, so the sprite is drawn far off
     // the canvas and its shadow is offset back into view.
-    drawHalo(g, sprite, x, y, width, height, color, blur, passes) {
+    drawHalo(g, sprite, x, y, width, height, color, blur, passes, k = 1) {
         const FAR = 4000;
         g.shadowColor = color;
-        g.shadowBlur = blur;
-        g.shadowOffsetX = FAR;
+        g.shadowBlur = blur * k;   // Shadows ignore the canvas scale, so scale them by hand
+        g.shadowOffsetX = FAR * k;
         for (let i = 0; i < passes; i++) {
             g.drawImage(
                 this.spriteSheet,
@@ -108,8 +111,8 @@ class Renderer {
     explosionGlow(frame) {
         const PAD = 28;
         const sprite = Sprites.explosion[frame];
-        return this.cached(`explosion${frame}`, sprite.width + PAD * 2, sprite.height + PAD * 2, g =>
-            this.drawHalo(g, sprite, PAD, PAD, sprite.width, sprite.height, "rgba(255, 150, 20, 1)", 22, 2));
+        return this.cached(`explosion${frame}`, sprite.width + PAD * 2, sprite.height + PAD * 2, (g, k) =>
+            this.drawHalo(g, sprite, PAD, PAD, sprite.width, sprite.height, "rgba(255, 150, 20, 1)", 22, 2, k));
     } // explosionGlow
 
 
@@ -118,20 +121,20 @@ class Renderer {
     laserGlow() {
         const PAD = Renderer.LASER_GLOW_PAD;
         const sprite = Sprites.laser;
-        return this.cached("laser", sprite.width + PAD * 2, Config.GRID_HEIGHT + PAD * 2, g =>
-            this.drawHalo(g, sprite, PAD, PAD, sprite.width, Config.GRID_HEIGHT, "rgba(255, 140, 0, 1)", 20, 3));
+        return this.cached("laser", sprite.width + PAD * 2, Config.GRID_HEIGHT + PAD * 2, (g, k) =>
+            this.drawHalo(g, sprite, PAD, PAD, sprite.width, Config.GRID_HEIGHT, "rgba(255, 140, 0, 1)", 20, 3, k));
     } // laserGlow
 
 
     // The ghost block: faint fill and outline with an orange glow
     ghostImage() {
         const PAD = 30;
-        return this.cached("ghost", Config.BLOCK_WIDTH + PAD * 2, Config.BLOCK_HEIGHT + PAD * 2, g => {
+        return this.cached("ghost", Config.BLOCK_WIDTH + PAD * 2, Config.BLOCK_HEIGHT + PAD * 2, (g, k) => {
             g.lineWidth = 3;
             g.fillStyle = "rgba(173, 216, 230, 0.1)";
             g.strokeStyle = "rgba(241, 109, 1, 0.25)";
             g.shadowColor = "rgba(241, 109, 1, 0.5)";
-            g.shadowBlur = 16;
+            g.shadowBlur = 16 * k;
             g.fillRect(PAD, PAD, Config.BLOCK_WIDTH, Config.BLOCK_HEIGHT);
             g.strokeRect(PAD, PAD, Config.BLOCK_WIDTH, Config.BLOCK_HEIGHT);
         });
@@ -142,13 +145,89 @@ class Renderer {
     zapGlow() {
         const PAD = 44;
         const inset = 2;
-        return this.cached("zap", Config.BLOCK_WIDTH + PAD * 2, Config.BLOCK_HEIGHT + PAD * 2, g => {
+        return this.cached("zap", Config.BLOCK_WIDTH + PAD * 2, Config.BLOCK_HEIGHT + PAD * 2, (g, k) => {
             g.shadowColor = "rgba(255, 255, 0, 1)";
-            g.shadowBlur = 30;
+            g.shadowBlur = 30 * k;
             g.fillStyle = "rgba(255, 255, 0, 0.25)";
             g.fillRect(PAD + inset, PAD + inset, Config.BLOCK_WIDTH - inset * 2, Config.BLOCK_HEIGHT - inset * 2);
         });
     } // zapGlow
+
+
+    // ====================
+    // Block shadows
+    // ====================
+    // The blocks cast one soft shadow onto the background, as if the whole stack
+    // were a single object: the silhouettes are merged and blurred together, and
+    // the result is drawn UNDER the blocks. So a block never shades another block,
+    // and the order they're drawn in can't matter.
+    //
+    // Blurring is slow, so the settled blocks' shadow is only rebuilt when the board
+    // changes. (The falling block uses a small pre-blurred shadow image instead.)
+
+    static SHADOW = { color: "rgba(0, 0, 0, 0.5)", offset: 10, blur: 20, pad: 30 };
+
+    // Rebuild the shadow of every settled block into an offscreen layer
+    rebuildBlockShadow(board) {
+        if (!this.blockShadowLayer) {
+            const layer = document.createElement("canvas");
+            layer.width = Math.round(Config.GRID_WIDTH * this.scale);
+            layer.height = Math.round(Config.GRID_HEIGHT * this.scale);
+            layer.getContext("2d").scale(this.scale, this.scale);
+            this.blockShadowLayer = layer;
+        }
+
+        const g = this.blockShadowLayer.getContext("2d");
+        g.clearRect(0, 0, Config.GRID_WIDTH, Config.GRID_HEIGHT);
+        this.drawSilhouetteShadow(g, board);
+        this.blockShadowVersion = board.version;
+    } // rebuildBlockShadow
+
+
+    // Draw the merged shadow of all blocks on g, without the blocks themselves: they're
+    // drawn far off to the side and their shadow offset back into place
+    drawSilhouetteShadow(g, board) {
+        const S = Renderer.SHADOW, k = this.scale, FAR = 4000;
+        g.save();
+        g.shadowColor = S.color;
+        g.shadowBlur = S.blur * k;
+        g.shadowOffsetX = (FAR + S.offset) * k;
+        g.shadowOffsetY = S.offset * k;
+        g.fillStyle = "#000";
+        board.each(block => {
+            if (!block.exploding) g.fillRect(block.x - FAR, block.y, Config.BLOCK_WIDTH, Config.BLOCK_HEIGHT);
+        });
+        g.restore();
+    } // drawSilhouetteShadow
+
+
+    // The shadow of a single block, pre-blurred (for the one that's falling)
+    singleBlockShadow() {
+        const S = Renderer.SHADOW;
+        return this.cached("blockShadow", Config.BLOCK_WIDTH + S.pad * 2, Config.BLOCK_HEIGHT + S.pad * 2, (g, k) => {
+            g.shadowColor = S.color;
+            g.shadowBlur = S.blur * k;
+            g.shadowOffsetX = (4000 + S.offset) * k;
+            g.shadowOffsetY = S.offset * k;
+            g.fillStyle = "#000";
+            g.fillRect(S.pad - 4000, S.pad, Config.BLOCK_WIDTH, Config.BLOCK_HEIGHT);
+        });
+    } // singleBlockShadow
+
+
+    // Draw all the blocks' shadows onto the background (call before drawing the blocks)
+    drawBlockShadows(game) {
+        const board = game.board;
+
+        // Rebuild only when the blocks changed (or while a swap has some in the air)
+        if (this.blockShadowVersion !== board.version || board.floating.size > 0) {
+            this.rebuildBlockShadow(board);
+        }
+        this.ctx.drawImage(this.blockShadowLayer, 0, 0, Config.GRID_WIDTH, Config.GRID_HEIGHT);
+
+        const active = game.activeBlock;
+        if (active) this.blit(this.singleBlockShadow(), active.x - Renderer.SHADOW.pad, active.y - Renderer.SHADOW.pad);
+    } // drawBlockShadows
 
 
     // Convert a pointer event to canvas coordinates. The canvas is scaled with
@@ -234,9 +313,9 @@ class Renderer {
         const ctx = this.ctx;
         ctx.save();
         ctx.shadowColor = "rgba(0, 0, 0, 0.5)";
-        ctx.shadowOffsetX = 10;
-        ctx.shadowOffsetY = 10;
-        ctx.shadowBlur = 20;
+        ctx.shadowOffsetX = 10 * this.scale;
+        ctx.shadowOffsetY = 10 * this.scale;
+        ctx.shadowBlur = 20 * this.scale;
         drawFn();
         ctx.restore();
     } // withDropShadow
@@ -253,30 +332,7 @@ class Renderer {
 
     drawGridBackground() {
         this.drawSprite(Sprites.gameGrid, 0, 0, Config.GRID_WIDTH, Config.GRID_HEIGHT);
-        this.blit(this.fieldShadow(), 0, 0);
     } // drawGridBackground
-
-
-    // The playing field sits in a recess: a soft shadow falls inward from its edges
-    // (strongest at the top, as if lit from above). It belongs to the field as a
-    // whole, not to each block, so blocks never shade one another. Blurred once.
-    fieldShadow() {
-        const W = Config.GRID_WIDTH, H = Config.GRID_HEIGHT;
-        return this.cached("fieldShadow", W, H, g => {
-            g.beginPath();
-            g.rect(0, 0, W, H);
-            g.clip();                                   // Keep only what lands inside the field
-
-            g.shadowColor = "rgba(0, 0, 0, 0.75)";
-            g.shadowBlur = 30;
-            g.shadowOffsetY = 8;
-            g.fillStyle = "#000";
-            g.beginPath();
-            g.rect(-300, -300, W + 600, H + 600);      // A big frame around the field,
-            g.rect(0, 0, W, H);                        // with the field cut out as a hole
-            g.fill("evenodd");                         // The frame is clipped away; its shadow remains
-        });
-    } // fieldShadow
 
 
     // The scorebar has a blurred drop shadow, which is expensive to draw every
@@ -285,11 +341,11 @@ class Renderer {
         const pad = Renderer.SCOREBAR_SHADOW_PAD;
         const bar = Sprites.scoreBar;
 
-        return this.cached("scorebar", 300 + pad * 2, 42 + pad * 2, g => {
+        return this.cached("scorebar", 300 + pad * 2, 42 + pad * 2, (g, k) => {
             g.shadowColor = "rgba(0, 0, 0, 0.5)";
-            g.shadowOffsetX = 10;
-            g.shadowOffsetY = 10;
-            g.shadowBlur = 20;
+            g.shadowOffsetX = 10 * k;
+            g.shadowOffsetY = 10 * k;
+            g.shadowBlur = 20 * k;
             g.drawImage(this.spriteSheet, bar.x, bar.y, bar.width, bar.height, pad, pad, 300, 42);
         });
     } // getScorebarImage
@@ -350,6 +406,9 @@ class Renderer {
         const active = game.activeBlock;
 
         this.drawGridBackground();
+
+        // Shadows first, so they fall on the background and never on a block
+        this.drawBlockShadows(game);
 
         // Settled blocks (the ones exploding are drawn by their explosion)
         game.board.each(block => {

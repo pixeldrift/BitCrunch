@@ -7,7 +7,7 @@
 // here depends on the DOM, so it ports directly to another platform.
 
 const Config = Object.freeze({
-    VERSION: "v0.04.3 (Beta)",
+    VERSION: "v0.04.4 (Beta)",
 
     // Layout. The canvas is a HUD strip on top of the playing grid, so the HUD
     // never covers blocks. Game logic uses grid coordinates (0,0 is the top-left

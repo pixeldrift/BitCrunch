@@ -78,6 +78,12 @@ class MusicPlayer {
         this.current.currentTime = 0;
     }
 
+    // Back to the first track, stopped
+    rewind() {
+        this.stop();
+        this.index = 0;
+    }
+
     next() {
         this.current.pause();
         this.index = (this.index + 1) % this.tracks.length;
@@ -229,6 +235,12 @@ class AudioManager {
     }
 
     stopMusic() { this.music.stop(); }
+
+    // A new game always starts the playlist from the top: B, C, D, E, F, then around again
+    restartMusic() {
+        this.music.rewind();
+        this.startMusic();
+    }
 
     // For pausing and resuming the game
     pauseMusic() { this.music.pause(); }

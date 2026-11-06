@@ -131,8 +131,7 @@ class Game {
         this.countdownValue = 3;
 
         this.audio.stopTheme();
-        this.audio.stopMusic();
-        this.audio.startMusic();
+        this.audio.restartMusic(); // Every game begins with the same first track
 
         this.startCountdown();
     } // resetGame

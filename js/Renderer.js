@@ -253,7 +253,30 @@ class Renderer {
 
     drawGridBackground() {
         this.drawSprite(Sprites.gameGrid, 0, 0, Config.GRID_WIDTH, Config.GRID_HEIGHT);
+        this.blit(this.fieldShadow(), 0, 0);
     } // drawGridBackground
+
+
+    // The playing field sits in a recess: a soft shadow falls inward from its edges
+    // (strongest at the top, as if lit from above). It belongs to the field as a
+    // whole, not to each block, so blocks never shade one another. Blurred once.
+    fieldShadow() {
+        const W = Config.GRID_WIDTH, H = Config.GRID_HEIGHT;
+        return this.cached("fieldShadow", W, H, g => {
+            g.beginPath();
+            g.rect(0, 0, W, H);
+            g.clip();                                   // Keep only what lands inside the field
+
+            g.shadowColor = "rgba(0, 0, 0, 0.75)";
+            g.shadowBlur = 30;
+            g.shadowOffsetY = 8;
+            g.fillStyle = "#000";
+            g.beginPath();
+            g.rect(-300, -300, W + 600, H + 600);      // A big frame around the field,
+            g.rect(0, 0, W, H);                        // with the field cut out as a hole
+            g.fill("evenodd");                         // The frame is clipped away; its shadow remains
+        });
+    } // fieldShadow
 
 
     // The scorebar has a blurred drop shadow, which is expensive to draw every

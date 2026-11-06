@@ -32,6 +32,7 @@ const HelpContent = Object.freeze({
         },
         {
             title: "KEYBOARD",
+            keyboardOnly: true, // Skipped on phones and tablets
             items: [
                 { type: "rows", rows: [
                     ["ENTER", "Start game"],
@@ -44,7 +45,7 @@ const HelpContent = Object.freeze({
                     ["T", "Next music track"],
                     ["G", "Ghost block on or off"],
                     ["X  Q", "End game"],
-                    ["H", "This screen"],
+                    ["H", "This screen (from the title or pause screen)"],
                 ] },
                 { type: "paragraph", text: "On a computer you can also steer with the mouse and click to drop. Right-click pauses." },
             ],

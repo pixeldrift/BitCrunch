@@ -25,7 +25,7 @@ T			Next Music Track
 M			Toggle Music
 F			Toggle Sound FX
 G			Toggle Ghost
-H  ?		How to Play (from the title, pause, or game-over screen)
+H  ?		How to Play (from the title or pause screen)
 X  Q		End Game
 ```
 
@@ -41,7 +41,7 @@ Tap					Nudge left or right, start, or resume
 ♪ ♫ icons			Tap to toggle music / sound FX
 ```
 
-The title, pause, and game-over screens all have a **HOW TO PLAY** button, with the controls and what every special block does.
+The title and pause screens have a **HOW TO PLAY** link, with the controls and what every special block does. (Phones don't show the keyboard page.)
 
 ## Specials
 
@@ -174,21 +174,22 @@ There is also a 10% chance of receiving a special block vs. a standard numeric b
 
 ## Levels and Difficulty
 
-The game speeds up as you play. Every 10 blocks you place is a new level:
+The game speeds up as you play. Every 20 blocks you place is a new level, and each level adds a little less speed than the one before, so it keeps getting harder without ramping out of control:
 
 ```
 Level	Time for a block to fall the whole grid
 1		12.0 s
-5		7.6 s
-10		4.3 s
-15		2.5 s
-20+		1.5 s (top speed)
+2		9.4 s
+5		6.0 s
+10		4.1 s
+20		2.9 s
+Later	Gradually approaches 2.2 s
 ```
 
 Also as the levels rise:
 
 - The pause after a block lands (before it merges) gets shorter.
-- From level 4, **junk blocks** (the plain tan ones) rise from the bottom of a few columns every so often. Junk never merges, and can only be cleared with specials (Bomb, Zap, Nuke, Blaster, or a Wild landing on it). The HUD shows `JUNK IN n`, which turns red when it's close.
+- From level 5, **junk blocks** (the plain tan ones) rise from the bottom of a few columns every so often. Junk never merges, and can only be cleared with specials (Bomb, Zap, Nuke, Blaster, or a Wild landing on it). The HUD shows `JUNK IN n`, which turns red when it's close.
 - The helpful specials (Bomb, Nuke, Zap, Blaster) show up less, and Bugs show up more.
 
 Every number is in `js/Config.js`, and the rules are in `js/Difficulty.js`. After changing them, run the tests: they include a bot that plays whole games, to check the game is still beatable but doesn't last forever.

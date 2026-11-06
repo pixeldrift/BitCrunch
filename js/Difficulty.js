@@ -13,10 +13,13 @@ class Difficulty {
         return 1 + Math.floor(blocksPlaced / Config.BLOCKS_PER_LEVEL);
     }
 
-    // How fast the falling block moves on its own, in pixels per second
+    // How fast the falling block moves on its own, in pixels per second.
+    // Eases toward MAX_FALL_SPEED: each level closes a fixed fraction of the
+    // remaining gap, so the early levels step up the most and later ones barely
+    // change (it feels steadily harder without becoming unplayable).
     static fallSpeed(level) {
-        const speed = Config.BASE_FALL_SPEED * Math.pow(Config.FALL_SPEED_GROWTH, level - 1);
-        return Math.min(speed, Config.MAX_FALL_SPEED);
+        const gap = Config.MAX_FALL_SPEED - Config.BASE_FALL_SPEED;
+        return Config.MAX_FALL_SPEED - gap * Math.pow(Config.FALL_SPEED_DECAY, level - 1);
     }
 
     // Seconds for a block to fall from the top to the bottom of an empty grid

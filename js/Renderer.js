@@ -293,7 +293,7 @@ class Renderer {
             this.drawSprite(sprite, b.x, b.y, b.width, b.height);
         });
 
-        this.drawHelpButton(Config.HELP_BUTTONS.welcome);
+        this.drawHelpButton(Config.HELP_BUTTONS.welcome, true);
 
         ctx.fillStyle = "white";
         ctx.font = "24px Silkscreen";
@@ -560,8 +560,6 @@ class Renderer {
             ctx.textAlign = "center";
             ctx.fillText(game.score, 200, 290);
             ctx.fillText(game.highScore, 200, 366);
-
-            this.drawHelpButton(Config.HELP_BUTTONS.gameOver);
         });
     } // showScoreboard
 
@@ -570,20 +568,35 @@ class Renderer {
     // Help screen
     // ====================
 
-    // The "HOW TO PLAY" button (in grid space)
-    drawHelpButton(rect) {
+    // The "HOW TO PLAY" button (in grid space). On the title screen it's just text.
+    drawHelpButton(rect, textOnly = false) {
         const ctx = this.ctx;
-        this.withDropShadow(() => {
-            this.drawSprite(BlockCatalog.byName("Teal").sprite, rect.x, rect.y, rect.width, rect.height);
-        });
+
+        if (!textOnly) {
+            this.withDropShadow(() => {
+                this.drawSprite(BlockCatalog.byName("Teal").sprite, rect.x, rect.y, rect.width, rect.height);
+            });
+        }
+
+        const label = "HOW TO PLAY";
+        const x = rect.x + rect.width / 2;
+        const y = rect.y + rect.height / 2 + 7;
 
         ctx.font = "20px Silkscreen";
         ctx.textAlign = "center";
         ctx.lineWidth = 4;
         ctx.strokeStyle = "#682f00";
         ctx.fillStyle = "#f16d01";
-        ctx.strokeText("HOW TO PLAY", rect.x + rect.width / 2, rect.y + rect.height / 2 + 7);
-        ctx.fillText("HOW TO PLAY", rect.x + rect.width / 2, rect.y + rect.height / 2 + 7);
+        ctx.strokeText(label, x, y);
+        ctx.fillText(label, x, y);
+
+        if (textOnly) { // Underline, so it reads as a link
+            const half = ctx.measureText(label).width / 2;
+            ctx.fillStyle = "#682f00";
+            ctx.fillRect(x - half - 2, y + 5, half * 2 + 4, 5);
+            ctx.fillStyle = "#f16d01";
+            ctx.fillRect(x - half, y + 6, half * 2, 3);
+        }
     } // drawHelpButton
 
 
@@ -627,7 +640,7 @@ class Renderer {
     drawHelpScreen(game) {
         const ctx = this.ctx;
         const W = Config.GRID_WIDTH, H = Config.GRID_HEIGHT;
-        const pages = HelpContent.pages;
+        const pages = game.helpPages;
         const page = pages[game.helpPage];
         const MARGIN = 24;
 

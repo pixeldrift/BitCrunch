@@ -7,7 +7,7 @@
 // here depends on the DOM, so it ports directly to another platform.
 
 const Config = Object.freeze({
-    VERSION: "v0.04.1 (Beta)",
+    VERSION: "v0.04.2 (Beta)",
 
     // Layout. The canvas is a HUD strip on top of the playing grid, so the HUD
     // never covers blocks. Game logic uses grid coordinates (0,0 is the top-left
@@ -35,16 +35,17 @@ const Config = Object.freeze({
     SCORE_POPUP_FADE_SPEED: 1,   // Percent alpha
 
     // Difficulty: the game gets harder every few blocks (see Difficulty.js)
-    BLOCKS_PER_LEVEL: 10,        // A new level every this many blocks placed
+    BLOCKS_PER_LEVEL: 20,  // A new level every this many blocks placed
     BASE_FALL_SPEED: 60,         // Pixels per second at level 1 (12 s to cross the grid)
-    FALL_SPEED_GROWTH: 1.12,     // Each level multiplies the speed by this...
-    MAX_FALL_SPEED: 480,         // ...up to this (1.5 s to cross the grid)
+    FALL_SPEED_DECAY: 0.94,      // Each level closes this fraction of the gap to the top speed:
+                                 // big jumps early, smaller and smaller later
+    MAX_FALL_SPEED: 330,         // Top speed the curve approaches (2.2 s to cross the grid)
     MIN_MERGE_DELAY: 60,         // The pause after landing shrinks to this
     MERGE_DELAY_STEP: 10,        // ...by this many ms per level
-    JUNK_START_LEVEL: 4,         // Junk blocks start rising from this level
-    JUNK_START_INTERVAL: 18,     // Blocks between junk at the first junk level
+    JUNK_START_LEVEL: 5,         // Junk blocks start rising from this level
+    JUNK_START_INTERVAL: 26,     // Blocks between junk at the first junk level
     JUNK_INTERVAL_STEP: 1,       // ...fewer each level
-    JUNK_MIN_INTERVAL: 10,        // ...but never faster than this
+    JUNK_MIN_INTERVAL: 14,        // ...but never faster than this
     JUNK_COUNT_STEP: 8,          // One more junk block per row of junk every this many levels (max 3)
     LEVEL_BANNER_TIME: 1.6,      // Seconds the "LEVEL n" banner shows
 
@@ -67,7 +68,6 @@ const Config = Object.freeze({
     HELP_BUTTONS: Object.freeze({
         welcome:  Object.freeze({ x: 100, y: 590, width: 200, height: 48 }),
         paused:   Object.freeze({ x: 100, y: 440, width: 200, height: 48 }),
-        gameOver: Object.freeze({ x: 100, y: 420, width: 200, height: 48 }),
     }),
 
     // The close button (an X) at the top right of the help screen (grid coordinates)

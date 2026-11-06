@@ -6,24 +6,32 @@ const { playGame } = require("./bot");
 const world = createWorld(1);
 const D = (code) => world.run(code);
 
-test("levels: a new one every 10 blocks placed", () => {
+test("levels: a new one every 20 blocks placed", () => {
     assert.strictEqual(D("Difficulty.levelFor(0)"), 1);
-    assert.strictEqual(D("Difficulty.levelFor(9)"), 1);
-    assert.strictEqual(D("Difficulty.levelFor(10)"), 2);
-    assert.strictEqual(D("Difficulty.levelFor(95)"), 10);
+    assert.strictEqual(D("Difficulty.levelFor(19)"), 1);
+    assert.strictEqual(D("Difficulty.levelFor(20)"), 2);
+    assert.strictEqual(D("Difficulty.levelFor(195)"), 10);
 });
 
-test("fall speed: 12 s to cross the grid at level 1, never slower, capped at 1.5 s", () => {
+test("fall speed: 12 s to cross the grid at level 1, always faster, never above the top speed", () => {
     assert.strictEqual(D("Difficulty.fallSpeed(1)"), 60);
     assert.strictEqual(D("Difficulty.fallTime(1)"), 12);
     let previous = 0;
-    for (let level = 1; level <= 40; level++) {
+    for (let level = 1; level <= 60; level++) {
         const speed = D(`Difficulty.fallSpeed(${level})`);
-        assert.ok(speed >= previous, `level ${level} slower than the one before`);
+        assert.ok(speed > previous, `level ${level} is not faster than the one before`);
+        assert.ok(speed < 330, `level ${level} reached the top speed`);
         previous = speed;
     }
-    assert.strictEqual(D("Difficulty.fallSpeed(40)"), 480);
-    assert.strictEqual(D("Difficulty.fallTime(40)"), 1.5);
+});
+
+test("fall speed: each level adds LESS than the one before (it eases off, never accelerates)", () => {
+    let previousStep = Infinity;
+    for (let level = 2; level <= 40; level++) {
+        const step = D(`Difficulty.fallSpeed(${level}) - Difficulty.fallSpeed(${level - 1})`);
+        assert.ok(step > 0 && step < previousStep, `level ${level} jumped by ${step}, more than the level before`);
+        previousStep = step;
+    }
 });
 
 test("merge delay shrinks with level but has a floor", () => {
@@ -34,11 +42,11 @@ test("merge delay shrinks with level but has a floor", () => {
 
 test("junk: none early, then more often, then more of it, never a full row", () => {
     assert.strictEqual(D("Difficulty.junkInterval(1)"), null);
-    assert.strictEqual(D("Difficulty.junkInterval(3)"), null);
-    assert.strictEqual(D("Difficulty.junkInterval(4)"), 18);
-    assert.ok(D("Difficulty.junkInterval(8)") < D("Difficulty.junkInterval(4)"));
-    assert.strictEqual(D("Difficulty.junkInterval(60)"), 10);
-    assert.strictEqual(D("Difficulty.junkCount(4)"), 1);
+    assert.strictEqual(D("Difficulty.junkInterval(4)"), null);
+    assert.strictEqual(D("Difficulty.junkInterval(5)"), 26);
+    assert.ok(D("Difficulty.junkInterval(9)") < D("Difficulty.junkInterval(5)"));
+    assert.strictEqual(D("Difficulty.junkInterval(60)"), 14);
+    assert.strictEqual(D("Difficulty.junkCount(5)"), 1);
     assert.strictEqual(D("Difficulty.junkCount(60)"), 3);
 });
 
@@ -54,7 +62,7 @@ test("specials: helpful ones get rarer, Bug commoner, Wild unchanged", () => {
 test("the level goes up as blocks land, with a banner", () => {
     const w = createWorld(1);
     const game = w.startPlaying();
-    game.blocksPlaced = 9;
+    game.blocksPlaced = 19;
     game.activeBlock.y = 600;       // Almost at the bottom
     w.clock.advance(2000);          // It lands
     assert.strictEqual(game.level, 2);
@@ -65,7 +73,7 @@ test("falling gets faster at higher levels", () => {
     const fallDistance = level => {
         const w = createWorld(1);
         const game = w.startPlaying();
-        game.blocksPlaced = (level - 1) * 10;
+        game.blocksPlaced = (level - 1) * 20;
         game.activeBlock.y = 0;
         w.clock.advance(1000);
         return game.activeBlock.y;
@@ -78,12 +86,12 @@ test("junk rises into columns that have room, and only when due", () => {
     const game = w.startPlaying();
     game.createBlock = () => {};
     game.activeBlock = null;
-    game.blocksPlaced = 30;                 // Level 4: junk is on
+    game.blocksPlaced = 80;                 // Level 5: junk is on
     game.blocksSinceJunk = 0;
     game.addJunkIfDue();
     assert.strictEqual(game.board.blocks.length, 0, "too early for junk");
 
-    game.blocksSinceJunk = 18;
+    game.blocksSinceJunk = 26;
     game.addJunkIfDue();
     const junk = game.board.blocks;
     assert.strictEqual(junk.length, 1);
@@ -97,13 +105,13 @@ test("junk pushes the column up, and a full column ends the game", () => {
     const game = w.startPlaying();
     game.createBlock = () => {};
     game.activeBlock = null;
-    game.blocksPlaced = 30;
+    game.blocksPlaced = 80;
     const make = (x, y, n) => w.run(`new Block(${x}, ${y}, BlockCatalog.byName("${n}"))`);
 
     // Three columns packed to the top, one with a single block
     for (const c of [0, 1, 2]) for (let r = 0; r < 12; r++) game.board.add(make(c * 100, r * 60, "2"));
     game.board.add(make(300, 660, "8"));
-    game.blocksSinceJunk = 18;
+    game.blocksSinceJunk = 26;
     game.addJunkIfDue();
 
     // The only column with room got the junk, and the 8 moved up one row
@@ -112,7 +120,7 @@ test("junk pushes the column up, and a full column ends the game", () => {
 
     // Now every column is full to the top: the next junk is game over
     game.board.add(make(300, 0, "4"));
-    game.blocksSinceJunk = 18;
+    game.blocksSinceJunk = 26;
     game.addJunkIfDue();
     assert.strictEqual(game.state, "gameOver");
 });
@@ -140,7 +148,7 @@ test("balance: a decent bot survives a while but not forever", () => {
     }
     blocks.sort((a, b) => a - b);
     const median = blocks[Math.floor(blocks.length / 2)];
-    assert.ok(median >= 70 && median <= 220, `median ${median} blocks is outside 70-220`);
+    assert.ok(median >= 100 && median <= 400, `median ${median} blocks is outside 100-400`);
     assert.ok(blocks[blocks.length - 1] < 600, "a bot survived 600 blocks: it's too easy again");
 });
 

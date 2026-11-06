@@ -45,15 +45,25 @@ test("help: from the pause screen, the game stays paused underneath and can resu
     assert.strictEqual(game.activeBlock, block, "the falling block is untouched");
 });
 
-test("help: from the game-over screen, returns to game over", () => {
+test("help: not available from the game-over screen", () => {
     const { world, game } = newGame();
     world.startPlaying();
     game.endGame();
     game.openHelp();
-    assert.strictEqual(game.state, "help");
-    assert.ok(!game.isRunning);
-    game.closeHelp();
     assert.strictEqual(game.state, "gameOver");
+});
+
+test("help: phones and tablets skip the keyboard page", () => {
+    const { world, game } = newGame();
+    assert.strictEqual(game.helpPages.length, 4);
+    game.options.touchDevice = true;
+    assert.strictEqual(game.helpPages.length, 3);
+    assert.ok(!game.helpPages.some(p => p.title === "KEYBOARD"));
+
+    // Paging stops at the last of the three
+    game.openHelp();
+    for (let i = 0; i < 10; i++) game.helpGo(1);
+    assert.strictEqual(game.helpPage, 2);
 });
 
 test("help: pages are clamped, and tapping next on the last page closes", () => {

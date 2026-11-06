@@ -35,7 +35,7 @@ class KeyboardController {
             return;
         }
 
-        // H opens the instructions (from the title, pause, or game-over screens)
+        // H opens the instructions (from the title or pause screens)
         if (event.key === "h" || event.key === "H" || event.key === "?") {
             game.openHelp();
             if (game.isHelp) return;

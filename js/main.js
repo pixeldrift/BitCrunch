@@ -13,6 +13,9 @@
     const audio = new AudioManager();
     const game = new Game(renderer, audio);
 
+    // A phone or tablet's main pointer is a finger. Laptops with touchscreens still report a mouse/trackpad.
+    game.options.touchDevice = !!(window.matchMedia && window.matchMedia("(pointer: coarse)").matches);
+
     new KeyboardController(game);
     new MouseController(game, renderer, canvas);
     new TouchController(game, renderer, canvas);

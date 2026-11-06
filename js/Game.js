@@ -51,6 +51,7 @@ class Game {
             showScorePopups: true,
             drawRowNumbers: false,
             drawScorebar: true,
+            touchDevice: false,   // Set by main.js; hides the keyboard help page
         };
 
         this.ui = { hoverPlayButton: false }; // Pointer hover state, set by input
@@ -150,10 +151,10 @@ class Game {
     // Help screen
     // ====================
 
-    // Open the instructions. Only when nothing is falling: from the title screen,
-    // the pause screen, or the game-over screen.
+    // Open the instructions. Only when nothing is falling: from the title screen
+    // or the pause screen.
     openHelp() {
-        const allowed = [GameState.WELCOME, GameState.PAUSED, GameState.GAME_OVER];
+        const allowed = [GameState.WELCOME, GameState.PAUSED];
         if (!allowed.includes(this.state)) return;
 
         this.helpReturn = this.state;
@@ -171,17 +172,21 @@ class Game {
         this.state = this.helpReturn;
         this.renderer.cancelOverlay();
 
-        // The pause and game-over screens are drawn once, so draw them again
+        // The pause screen is drawn once, so draw it again
         if (this.state === GameState.PAUSED) this.renderer.showPause(this, false);
-        else if (this.state === GameState.GAME_OVER) this.renderer.showScoreboard(this, false);
         else this.draw();
     } // closeHelp
 
 
+    // The help pages to show. Phones and tablets don't need the keyboard page.
+    get helpPages() {
+        return HelpContent.pages.filter(page => !(page.keyboardOnly && this.options.touchDevice));
+    }
+
     // Move through the pages (clamped, for the keyboard)
     helpGo(direction) {
         if (!this.isHelp) return;
-        const last = HelpContent.pages.length - 1;
+        const last = this.helpPages.length - 1;
         this.helpPage = Math.max(0, Math.min(last, this.helpPage + direction));
         this.draw();
     } // helpGo
@@ -190,7 +195,7 @@ class Game {
     // Next page, and close after the last one (for tapping)
     helpNext() {
         if (!this.isHelp) return;
-        if (this.helpPage >= HelpContent.pages.length - 1) this.closeHelp();
+        if (this.helpPage >= this.helpPages.length - 1) this.closeHelp();
         else this.helpGo(1);
     } // helpNext
 

@@ -106,7 +106,7 @@ function createWorld(seed = 1, config = {}) {
     // A Game with silent stand-ins for sound and drawing
     ctx.__audio = {
         sfxOn: true, musicOn: true,
-        play() {}, startMusic() {}, stopMusic() {}, pauseMusic() {}, resumeMusic() {},
+        play() {}, startMusic() {}, stopMusic() {}, restartMusic() {}, pauseMusic() {}, resumeMusic() {},
         playTheme() {}, stopTheme() {}, toggleSfx() {}, toggleMusic() {}, nextTrack() {},
     };
     ctx.__renderer = {

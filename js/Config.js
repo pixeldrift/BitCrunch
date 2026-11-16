@@ -7,7 +7,7 @@
 // here depends on the DOM, so it ports directly to another platform.
 
 const Config = Object.freeze({
-    VERSION: "v0.04.5 (Beta)",
+    VERSION: "v0.04.6 (Beta)",
 
     // Layout. The canvas is a HUD strip on top of the playing grid, so the HUD
     // never covers blocks. Game logic uses grid coordinates (0,0 is the top-left
@@ -48,6 +48,8 @@ const Config = Object.freeze({
     JUNK_MIN_INTERVAL: 14,        // ...but never faster than this
     JUNK_COUNT_STEP: 8,          // One more junk block per row of junk every this many levels (max 3)
     LEVEL_BANNER_TIME: 1.6,      // Seconds the "LEVEL n" banner shows
+    JUNK_SLIDE_TIME: 0.3,        // Seconds junk takes to rise into view
+    JUNK_SPAWN_DELAY: 450,       // ms after junk arrives before the next block appears
 
     // Spawning
     SPECIAL_BLOCK_CHANCE: 10,    // Percent chance a new block is a special
@@ -66,8 +68,10 @@ const Config = Object.freeze({
     // The "HOW TO PLAY" button on each screen that has one (grid coordinates),
     // keyed by the game state it appears in
     HELP_BUTTONS: Object.freeze({
-        welcome:  Object.freeze({ x: 100, y: 590, width: 200, height: 48 }),
-        paused:   Object.freeze({ x: 100, y: 440, width: 200, height: 48 }),
+        // Each is centered vertically in a 60 px block row: row 10 (600-660) on the
+        // title screen, row 7 (420-480) on the pause screen
+        welcome:  Object.freeze({ x: 100, y: 606, width: 200, height: 48 }),
+        paused:   Object.freeze({ x: 100, y: 426, width: 200, height: 48 }),
     }),
 
     // The close button (an X) at the top right of the help screen (grid coordinates)

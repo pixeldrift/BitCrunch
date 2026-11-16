@@ -66,6 +66,7 @@ class Game {
         this.activeBlock = null;     // The falling block
         this.dropping = false;       // Player dropped the block and it's on its way down
         this.swapInProgress = false; // A swap animation is running
+        this.sliding = false;        // Some blocks are sliding into place (junk arriving)
         this.helpReturn = GameState.WELCOME; // Where the help screen goes back to
         this.helpPage = 0;
 
@@ -127,6 +128,7 @@ class Game {
         this.activeBlock = null;
         this.dropping = false;
         this.swapInProgress = false;
+        this.sliding = false;
         this.resolvingSince = null;
         this.countdownValue = 3;
 
@@ -366,6 +368,7 @@ class Game {
         if (!this.isPlaying) return;
 
         this.effects.update(dt);
+        if (this.sliding) this.updateSlides(dt);
 
         const block = this.activeBlock;
         if (!block) return;
@@ -381,6 +384,20 @@ class Game {
             block.y = nextY;
         }
     } // update
+
+
+    // Ease blocks that are sliding into place (rising junk) toward their real position
+    updateSlides(dt) {
+        const step = Config.BLOCK_HEIGHT / Config.JUNK_SLIDE_TIME * dt;
+        let any = false;
+        this.board.each(b => {
+            if (b.slideY > 0) {
+                b.slideY = Math.max(0, b.slideY - step);
+                if (b.slideY > 0) any = true;
+            }
+        });
+        this.sliding = any;
+    } // updateSlides
 
 
     // ====================
@@ -426,7 +443,16 @@ class Game {
                 this.resolvingSince = null;
                 if (this.activeBlock || !this.isRunning) return;
 
-                this.addJunkIfDue();
+                // If junk is due it slides in first, and the next block waits for it
+                if (this.addJunkIfDue()) {
+                    this.resolvingSince = performance.now();
+                    this.after(Config.JUNK_SPAWN_DELAY, () => {
+                        this.resolvingSince = null;
+                        if (!this.activeBlock && this.isRunning) this.createBlock();
+                    });
+                    return;
+                }
+
                 if (!this.activeBlock && this.isRunning) this.createBlock();
             });
         });
@@ -439,17 +465,18 @@ class Game {
     } // levelUp
 
 
-    // Every so often, push junk up from the bottom of a few columns
+    // Every so often, push junk up from the bottom of a few columns.
+    // Returns true if junk arrived (so the caller can give it a moment to be seen).
     addJunkIfDue() {
         const interval = Difficulty.junkInterval(this.level);
-        if (interval === null || this.blocksSinceJunk < interval) return;
+        if (interval === null || this.blocksSinceJunk < interval) return false;
         this.blocksSinceJunk = 0;
 
         // Columns with room for another block
         const columns = [0, 1, 2, 3].filter(c => this.board.cells[c][0] === null);
         if (columns.length === 0) {
             this.endGame(); // Every column is full to the top
-            return;
+            return false;
         }
 
         // Choose some of them at random
@@ -461,10 +488,15 @@ class Game {
 
         for (const c of columns.slice(0, count)) {
             this.board.pushUp(c, new Block(c * Config.BLOCK_WIDTH, 0, BlockCatalog.junk));
+
+            // Show the column rising: everything in it starts one row lower and slides up
+            this.board.column(c * Config.BLOCK_WIDTH).forEach(b => { b.slideY = Config.BLOCK_HEIGHT; });
+            this.sliding = true;
         }
 
         this.audio.play("bug");
         this.shake(250, 3);
+        return true;
     } // addJunkIfDue
 
 

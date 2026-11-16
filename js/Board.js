@@ -47,7 +47,10 @@ class Board {
     add(block) {
         this.version++;
         const c = Board.columnOf(block.x), r = Board.rowOf(block.y);
-        if (c >= 0 && r >= 0 && this.cells[c][r] === null) {
+        const occupant = c >= 0 && r >= 0 ? this.cells[c][r] : null;
+
+        // A block that is mid-explosion is as good as gone: it can be replaced
+        if (c >= 0 && r >= 0 && (occupant === null || occupant.exploding)) {
             this.cells[c][r] = block;
         } else {
             this.floating.add(block);
@@ -138,7 +141,8 @@ class Board {
 
         const firstRow = Math.floor(y / Config.BLOCK_HEIGHT) + 1; // First row strictly below y
         for (let r = Math.max(firstRow, 0); r < Config.ROWS; r++) {
-            if (this.cells[c][r] !== null) {
+            const b = this.cells[c][r];
+            if (b !== null && !b.exploding) { // A block that's exploding no longer holds anything up
                 return Math.min(limit, r * Config.BLOCK_HEIGHT - Config.BLOCK_HEIGHT);
             }
         }
@@ -150,7 +154,8 @@ class Board {
         const c = Board.columnOf(x);
         if (c < 0) return 0;
         for (let r = 0; r < Config.ROWS; r++) {
-            if (this.cells[c][r] !== null) return Math.max(r - 1, 0) * Config.BLOCK_HEIGHT;
+            const b = this.cells[c][r];
+            if (b !== null && !b.exploding) return Math.max(r - 1, 0) * Config.BLOCK_HEIGHT;
         }
         return (Config.ROWS - 1) * Config.BLOCK_HEIGHT;
     }
@@ -161,7 +166,8 @@ class Board {
         if (c < 0) return false;
         for (let r = 0; r < Config.ROWS; r++) {
             const top = r * Config.BLOCK_HEIGHT;
-            if (this.cells[c][r] !== null &&
+            const b = this.cells[c][r];
+            if (b !== null && !b.exploding &&
                 top < y + Config.BLOCK_HEIGHT && top + Config.BLOCK_HEIGHT > y) return true;
         }
         return false;

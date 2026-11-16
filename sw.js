@@ -6,7 +6,7 @@
 // you ship a change, so players get the new files. tests/assets.test.js checks
 // that this list matches index.html and that the version matches.
 
-const CACHE_VERSION = "0.04.5";
+const CACHE_VERSION = "0.04.6";
 const CACHE_NAME = "bitcrunch-" + CACHE_VERSION;
 
 // Everything needed to start and play, downloaded when the game is first opened
@@ -34,7 +34,7 @@ const CORE_FILES = [
     "icons/icon-192.png",
     "icons/icon-512.png",
     "icons/apple-touch-icon.png",
-    "audio/music/music-a.mp3",
+    "audio/music/theme-loop.flac",
     "audio/sfx/welcomeSound.mp3",
     "audio/sfx/startSound.mp3",
     "audio/sfx/leftSound.mp3",

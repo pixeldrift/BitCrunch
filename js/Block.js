@@ -13,6 +13,7 @@ class Block {
         this.y = y;
         this.type = type;
         this.exploding = false; // True while its explosion animation plays
+        this.slideY = 0;        // Extra pixels below its real position while it slides into place (junk arriving)
     }
 
     // Value follows the current type, so a block that merged 2 -> 4 is worth 4

@@ -92,6 +92,83 @@ class MusicPlayer {
 } // class MusicPlayer
 
 
+// The welcome / pause / game-over theme. Web Audio can loop a decoded buffer with no
+// gap at all, which an <audio loop> can't (browsers leave a small pause at the wrap).
+// Falls back to an <audio> element if decoding isn't possible.
+class ThemePlayer {
+    constructor(audio, info) {
+        this.audio = audio;
+        this.info = info;
+        this.playing = false;   // Should it be playing right now?
+        this.buffer = null;
+        this.source = null;     // The running loop
+        this.gain = null;
+        this.fallback = null;   // <audio> element, only if Web Audio can't be used
+
+        if (!audio.routeMusic) { this.useFallback(); return; }
+
+        fetch(info.file)
+            .then(response => response.arrayBuffer())
+            .then(data => new Promise((resolve, reject) => audio.context.decodeAudioData(data, resolve, reject)))
+            .then(buffer => {
+                this.buffer = buffer;
+                this.gain = audio.context.createGain();
+                this.gain.gain.value = AudioManager.volumeFor(info.lufs);
+                this.gain.connect(audio.context.destination);
+                if (this.playing) this.startSource(); // It was asked for while loading
+            })
+            .catch(() => this.useFallback());
+    }
+
+    useFallback() {
+        this.fallback = new Audio(this.info.fallback);
+        this.fallback.loop = true;
+        this.fallback.preload = "auto";
+        this.audio.attachMusic(this.fallback, this.info.lufs);
+        if (this.playing) this.audio.playElement(this.fallback);
+    }
+
+    // Same idea as an <audio> element's `paused`
+    get paused() {
+        return this.fallback ? this.fallback.paused : !this.playing;
+    }
+
+    play() {
+        if (this.fallback) { this.playing = true; this.audio.playElement(this.fallback); return; }
+        if (this.playing) return;
+        this.playing = true;
+        if (this.buffer) this.startSource();
+    }
+
+    // Stop; the next play() starts from the beginning
+    pause() {
+        this.playing = false;
+        if (this.fallback) { this.fallback.pause(); this.fallback.currentTime = 0; }
+        this.stopSource();
+    }
+
+    stop() { this.pause(); }
+
+    startSource() {
+        this.stopSource();
+        const source = this.audio.context.createBufferSource();
+        source.buffer = this.buffer;
+        source.loop = true;
+        source.connect(this.gain);
+        source.start(0); // While the context is still locked this waits, then starts from the top
+        this.source = source;
+    }
+
+    stopSource() {
+        if (this.source) {
+            try { this.source.stop(); } catch (e) { /* already stopped */ }
+            this.source.disconnect();
+            this.source = null;
+        }
+    }
+} // class ThemePlayer
+
+
 // Everything audible. The rest of the game only talks to this class.
 class AudioManager {
     static SFX_NAMES = [
@@ -103,7 +180,10 @@ class AudioManager {
     // Every music file with its measured loudness (integrated LUFS, from ffmpeg's
     // ebur128 filter). Volumes are computed from these so all tracks sound equally
     // loud against the sound effects.
-    static THEME = { file: "audio/music/music-a.mp3", lufs: -13.3 };
+    // The theme is a lossless file trimmed to an exact musical loop (the notes land on
+    // the beat grid across the wrap) and played gapless through Web Audio. The MP3 is
+    // the fallback for where that isn't possible.
+    static THEME = { file: "audio/music/theme-loop.flac", fallback: "audio/music/music-a.mp3", lufs: -13.3 };
 
     static MUSIC = [
         { file: "audio/music/music-b.mp3", lufs: -9.7 },
@@ -142,10 +222,7 @@ class AudioManager {
         this.music = new MusicPlayer(AudioManager.MUSIC, this);
 
         // The short theme that loops on the welcome and game-over screens
-        this.theme = new Audio(AudioManager.THEME.file);
-        this.theme.loop = true;
-        this.theme.preload = "auto";
-        this.attachMusic(this.theme, AudioManager.THEME.lufs);
+        this.theme = new ThemePlayer(this, AudioManager.THEME);
         this.themeWanted = false; // True while a screen that wants the theme is showing
 
         this.suspended = false;   // Silenced because the page is hidden
@@ -207,7 +284,7 @@ class AudioManager {
         this.suspended = false;
         if (this.context) this.context.resume();
 
-        if (this.resumeAfterHidden.theme) this.playElement(this.theme);
+        if (this.resumeAfterHidden.theme) this.theme.play();
         if (this.resumeAfterHidden.music) this.music.play();
         this.resumeAfterHidden = { theme: false, music: false };
     }
@@ -220,13 +297,12 @@ class AudioManager {
     // Loop the welcome / game-over theme (if music is on)
     playTheme() {
         this.themeWanted = true;
-        if (this.musicOn && this.theme.paused && !this.suspended) this.playElement(this.theme);
+        if (this.musicOn && this.theme.paused && !this.suspended) this.theme.play();
     }
 
     stopTheme() {
         this.themeWanted = false;
-        this.theme.pause();
-        this.theme.currentTime = 0;
+        this.theme.stop();
     }
 
     // Start the background music if it's enabled and not already playing
@@ -254,9 +330,9 @@ class AudioManager {
 
     toggleMusic() {
         // Whatever is supposed to be playing right now: the theme, or the game music
-        const active = this.themeWanted ? this.theme : this.music.current;
+        const active = this.themeWanted ? this.theme : this.music;
 
-        if (this.musicOn) active.pause(); else this.playElement(active);
+        if (this.musicOn) active.pause(); else active.play();
         this.musicOn = !this.musicOn;
     }
 } // class AudioManager

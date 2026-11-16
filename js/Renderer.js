@@ -195,7 +195,7 @@ class Renderer {
         g.shadowOffsetY = S.offset * k;
         g.fillStyle = "#000";
         board.each(block => {
-            if (!block.exploding) g.fillRect(block.x - FAR, block.y, Config.BLOCK_WIDTH, Config.BLOCK_HEIGHT);
+            if (!block.exploding) g.fillRect(block.x - FAR, block.y + block.slideY, Config.BLOCK_WIDTH, Config.BLOCK_HEIGHT);
         });
         g.restore();
     } // drawSilhouetteShadow
@@ -220,7 +220,7 @@ class Renderer {
         const board = game.board;
 
         // Rebuild only when the blocks changed (or while a swap has some in the air)
-        if (this.blockShadowVersion !== board.version || board.floating.size > 0) {
+        if (this.blockShadowVersion !== board.version || board.floating.size > 0 || game.sliding) {
             this.rebuildBlockShadow(board);
         }
         this.ctx.drawImage(this.blockShadowLayer, 0, 0, Config.GRID_WIDTH, Config.GRID_HEIGHT);
@@ -413,7 +413,7 @@ class Renderer {
         // Settled blocks (the ones exploding are drawn by their explosion)
         game.board.each(block => {
             if (block.exploding) return;
-            this.drawSprite(block.type.sprite, block.x, block.y, BLOCK_WIDTH, BLOCK_HEIGHT);
+            this.drawSprite(block.type.sprite, block.x, block.y + block.slideY, BLOCK_WIDTH, BLOCK_HEIGHT);
         });
 
         // Where the active block would land

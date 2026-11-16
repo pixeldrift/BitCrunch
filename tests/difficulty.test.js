@@ -156,3 +156,55 @@ test("balance: playing randomly loses quickly", () => {
     const result = playGame({ seed: 1, maxBlocks: 600, strategy: "random", check: false });
     assert.ok(result.over && result.blocks < 150);
 });
+
+test("junk arrives in view first: the next block waits, and the junk slides up into place", () => {
+    const w = createWorld(1);
+    const game = w.startPlaying();
+    game.activeBlock = null;
+    game.board.clear();
+    game.blocksPlaced = 80;                 // Level 5
+    game.blocksSinceJunk = 25;              // The next landing makes junk due
+    game.activeBlock = w.run('new Block(0, 0, BlockCatalog.byName("2"))');
+    game.drop();
+
+    // Let it land and the junk arrive (but not the next block)
+    let junkAt = null;
+    for (let t = 0; t < 2000 && junkAt === null; t += 10) {
+        w.clock.advance(10);
+        if (game.board.blocks.some(b => b.type.name === "Junk")) junkAt = t;
+    }
+    assert.ok(junkAt !== null, "junk never arrived");
+    assert.strictEqual(game.activeBlock, null, "the next block must not appear with the junk");
+    assert.ok(game.board.blocks.some(b => b.slideY > 0), "junk should be sliding in");
+
+    w.clock.advance(350);                   // Slide finished
+    assert.ok(game.board.blocks.every(b => b.slideY === 0), "junk should have settled");
+    assert.strictEqual(game.activeBlock, null, "still waiting before the next block");
+
+    w.clock.advance(500);
+    assert.ok(game.activeBlock, "then the next block appears");
+});
+
+test("a block lands THROUGH one that is mid-explosion (it must not be left hanging)", () => {
+    const w = createWorld(1);
+    const game = w.startPlaying();
+    game.createBlock = () => {};
+    game.activeBlock = null;
+    game.board.clear();
+    const make = (x, y, n) => w.run(`new Block(${x}, ${y}, BlockCatalog.byName("${n}"))`);
+    const bottom = make(0, 660, "8");
+    game.board.add(bottom);
+    game.explodeBlock(bottom);              // Mid-explosion, still in its cell for a moment
+
+    game.activeBlock = make(0, 500, "2");
+    game.dropping = true;
+    w.clock.advance(150);                   // The piece lands while the explosion plays
+
+    const piece = game.board.blocks.find(b => b.type.name === "2");
+    assert.ok(piece, "the piece landed");
+    assert.strictEqual(piece.y, 660, "it fell to the floor instead of resting on the exploding block");
+
+    w.clock.advance(1000);
+    assert.strictEqual(game.board.blocks.length, 1);
+    assert.strictEqual(game.board.blockAt(0, 660).type.name, "2");
+});

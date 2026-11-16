@@ -44,7 +44,7 @@ test("audio: every sound effect and music file in the code exists", () => {
     const names = [...audio.match(/SFX_NAMES = \[([\s\S]*?)\]/)[1].matchAll(/"(\w+)"/g)].map(m => m[1]);
     assert.strictEqual(names.length, 20);
     names.forEach(n => assert.ok(exists(`audio/sfx/${n}Sound.mp3`), "missing sfx " + n));
-    [...audio.matchAll(/file: "([^"]+)"/g)].forEach(m => assert.ok(exists(m[1]), "missing music " + m[1]));
+    [...audio.matchAll(/(?:file|fallback): "([^"]+)"/g)].forEach(m => assert.ok(exists(m[1]), "missing music " + m[1]));
 });
 
 test("fonts: the self-hosted files exist and index.html points at them", () => {

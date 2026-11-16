@@ -46,12 +46,17 @@
             inset: 0;
             margin: 0;
             box-sizing: border-box;
+            /* Top and sides keep clear of the notch. At the bottom only the part of the
+               home indicator that matters is kept clear, so the board isn't left
+               floating above a wide empty band. */
             padding: env(safe-area-inset-top) env(safe-area-inset-right)
-                     env(safe-area-inset-bottom) env(safe-area-inset-left);
+                     max(calc(env(safe-area-inset-bottom) - 22px), 0px) env(safe-area-inset-left);
             display: flex;
             justify-content: center;
             align-items: center;
-            background-color: #333;
+            /* The band behind the notch matches the HUD strip, so the HUD reads as
+               reaching up under the status bar (and nothing looks smudged there) */
+            background: linear-gradient(#222 env(safe-area-inset-top), #333 env(safe-area-inset-top));
             color: #f16d01;
             font-family: "Silkscreen", sans-serif;
             font-weight: bold;

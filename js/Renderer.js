@@ -616,7 +616,7 @@ class Renderer {
                 ctx.fillText("PAUSED", 200, 380);
             });
 
-            this.drawHelpButton(Config.HELP_BUTTONS.paused);
+            this.drawHelpButton(Config.HELP_BUTTONS.paused, true);
         });
     } // showPause
 

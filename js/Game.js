@@ -411,7 +411,7 @@ class Game {
         this.board.add(block);
 
         this.awardPoints(block);
-        this.audio.play("place");
+        if (block.type.landSound) this.audio.play(block.type.landSound);
 
         const levelBefore = this.level;
         this.blocksPlaced++;
@@ -635,13 +635,13 @@ class Game {
 
 
     // Play the explosion on a block, then remove it from the board
-    explodeBlock(block, callback = null) {
+    explodeBlock(block, callback = null, sound = "smallBoom") {
         if (!block) return;
 
         const explosion = { x: block.x, y: block.y, frame: 0 };
         block.exploding = true;
         this.effects.explosions.push(explosion);
-        this.audio.play("smallBoom");
+        this.audio.play(sound);
 
         const frameCount = Sprites.explosion.length;
         let frame = 0;

@@ -24,6 +24,9 @@ class BlockType {
 
     get isNumber() { return this.value !== null; }
 
+    // The sound when a block of this type lands (null for none)
+    get landSound() { return "place"; }
+
     // Default: just try the standard merge with whatever is below
     land(game, block, done) {
         game.standardMerge(block, done);
@@ -273,10 +276,14 @@ class NukeBlockType extends BlockType {
 class BlasterBlockType extends BlockType {
     constructor() { super("Blaster", 500, 600, { special: true }); }
 
-    // Landing (it eventually falls on its own): it explodes, and anything that
-    // was resting on it falls into the gap before the next block appears
+    // It crashes with a bang instead of the landing thud
+    get landSound() { return null; }
+
+    // Landing (it eventually falls on its own): the blaster itself blows up
+    // (nothing else is harmed), and anything that was resting on it falls into
+    // the gap before the next block appears
     land(game, block, done) {
-        game.explodeBlock(block, () => game.applyGravity(done));
+        game.explodeBlock(block, () => game.applyGravity(done), "bomb");
     }
 
     // The drop command fires the laser instead of dropping the block

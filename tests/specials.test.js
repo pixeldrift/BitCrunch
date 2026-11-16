@@ -69,3 +69,33 @@ test("special: magnet keeps the same blocks, rearranged, and is deterministic", 
     assert.deepStrictEqual(values, ["1", "16", "2", "4", "8"]);
     assert.strictEqual(a.score, 0);
 });
+
+test("blaster landing: it explodes with a bang, not the landing thud, and harms no other block", () => {
+    const world = createWorld(1);
+    const game = world.startPlaying();
+    game.createBlock = () => {};
+    game.activeBlock = null;
+    game.board.clear();
+    const make = (x, y, n) => world.run(`new Block(${x}, ${y}, BlockCatalog.byName("${n}"))`);
+    game.board.add(make(300, 660, "8"));
+    game.board.add(make(300, 600, "4"));
+    game.activeBlock = make(300, 0, "Blaster");
+    world.game.dropping = true;             // Let it fall on its own to the stack
+    game.audio.played.length = 0;
+    world.clock.advance(2500);
+
+    const left = Array.from(game.board.blocks.map(b => b.type.name).sort());
+    assert.deepStrictEqual(left, ["4", "8"], "the blocks it crashed onto are untouched");
+    assert.ok(game.audio.played.includes("bomb"), "it should explode with the bomb sound");
+    assert.ok(!game.audio.played.includes("place"), "no landing thud for a blaster");
+});
+
+test("a normal block still makes the landing sound", () => {
+    const world = createWorld(1);
+    const game = world.startPlaying();
+    game.createBlock = () => {};
+    game.audio.played.length = 0;
+    game.dropping = true;
+    world.clock.advance(1500);
+    assert.ok(game.audio.played.includes("place"));
+});

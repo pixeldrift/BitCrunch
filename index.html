@@ -65,6 +65,17 @@
             overflow: hidden;
         }
 
+        /* Run as a Home Screen app there is no Safari bar, and the board would reach the
+           screen's rounded bottom corners and be clipped by them. Keep the same sort of
+           margin the Safari bar would have given; the board gets narrower to match
+           (it keeps its proportions). */
+        @media (display-mode: standalone) {
+            body { padding-bottom: max(env(safe-area-inset-bottom), 40px); }
+        }
+        .standalone body { /* The same, for older iOS that only reports it in JavaScript */
+            padding-bottom: max(env(safe-area-inset-bottom), 40px);
+        }
+
         .game-container {
             display: flex;
             flex-direction: row; /* Side-by-side layout */
@@ -87,13 +98,13 @@
             box-sizing: border-box;
             display: block;
 
-            /* As tall as the screen allows (up to the game's natural size), at the
-               game's own proportions. The width follows from the height. */
-            aspect-ratio: 400 / 804;
-            height: 100%;
-            max-height: 804px;
+            /* As big as fits the available space (up to the game's natural size), always at
+               the game's own proportions: whichever of width or height runs out first limits
+               it, and the other follows. */
             width: auto;
+            height: auto;
             max-width: 100%;
+            max-height: min(100%, 804px);
         }
 
         /* Controls table styling */
@@ -234,6 +245,9 @@
     <script src="js/main.js"></script>
 
     <script>
+
+        // Older iOS only says it's running as a Home Screen app through this flag
+        if (window.navigator.standalone) document.documentElement.classList.add("standalone");
 
         // Save the game for offline play and faster loading (needs http/https, not file://)
         if ("serviceWorker" in navigator && location.protocol.startsWith("http")) {

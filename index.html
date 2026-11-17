@@ -2,11 +2,13 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, user-scalable=no">
-    <meta name="theme-color" content="#333333">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <meta name="theme-color" content="#000000">
     <meta name="mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-capable" content="yes">
-    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <!-- An opaque status bar: the page starts below it. (The "translucent" style, and
+         viewport-fit=cover, let the page draw underneath the bar, where iOS blurs it.) -->
+    <meta name="apple-mobile-web-app-status-bar-style" content="black">
     <meta name="apple-mobile-web-app-title" content="BitCrunch">
     <link rel="manifest" href="manifest.webmanifest">
     <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
@@ -38,9 +40,8 @@
             background-color: #333;
         }
 
-        /* The page fills the whole screen. When it's run as a Home Screen app, the
-           screen reaches under the notch and the home bar, so the safe-area insets
-           keep the game clear of them (the insets are 0 everywhere else). */
+        /* The page fills the screen below the status bar. The safe-area insets are a
+           backstop for devices that still report them (they're 0 everywhere else). */
         body {
             position: fixed;
             inset: 0;
